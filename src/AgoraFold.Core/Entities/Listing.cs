@@ -10,4 +10,10 @@ public class Listing
 
     public int CategoryId { get; set; }
     public Category Category { get; set; } = null!;
+
+    public string OwnerId { get; set; } = "";
+    public AppUser Owner { get; set; } = null!;
+
+    public ICollection<ListingImage> Images { get; set; } = [];
+    public ICollection<Conversation> Conversations { get; set; } = [];
 }

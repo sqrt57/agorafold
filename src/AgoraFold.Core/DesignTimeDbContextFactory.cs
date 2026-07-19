@@ -8,7 +8,7 @@ public class DesignTimeDbContextFactory : IDesignTimeDbContextFactory<AppDbConte
     public AppDbContext CreateDbContext(string[] args)
     {
         var options = new DbContextOptionsBuilder<AppDbContext>()
-            .UseNpgsql("Host=localhost;Database=agorafold;Username=agorafold;Password=agorafold")
+            .UseNpgsql("Host=localhost;Port=5433;Database=agorafold;Username=agorafold;Password=agorafold")
             .UseSnakeCaseNamingConvention()
             .Options;
 
