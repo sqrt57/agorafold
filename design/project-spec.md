@@ -24,7 +24,7 @@ Current (`AgoraFold.Core/Entities`):
 
 Additions needed for this spec's feature scope:
 
-- `User` — account identity. `Id`, `DisplayName`, plus whatever ASP.NET Identity requires. A `Listing` gains an `OwnerId`/`Owner`.
+- `User` — `IdentityUser` (ASP.NET Identity), extended with `DisplayName`. A `Listing` gains an `OwnerId`/`Owner`.
 - `ListingImage` — `Id`, `ListingId`, storage path/URL, `SortOrder`. A `Listing` has many `ListingImage`.
 - `Conversation` — scoped to one `Listing`, between the listing's owner and one other `User`.
 - `Message` — `Id`, `ConversationId`, `SenderId`, `Body`, `SentAt`.
@@ -43,17 +43,22 @@ erDiagram
 ## Features (MVC variant)
 
 ### Accounts
-- Register / log in / log out (ASP.NET Identity, cookie auth).
+- Register / log in / log out via ASP.NET Identity, cookie auth — confirmed.
 - "My listings" page scoped to the signed-in user.
 
 ### Listings
 - Create / edit / delete a listing (owner only), with a category and 0+ images.
-- Browse listings: paginated list, filter by category, keyword search over title/description.
+- Browse listings: paginated list, filter by category, keyword search over title/description via `ILIKE` — no full-text search for v1.
 - Listing detail page.
 
 ### Images
 - Upload one or more images per listing; stored on local disk (path referenced from `ListingImage`) — no cloud storage dependency for this variant.
 - First image (by `SortOrder`) is the thumbnail shown in listing lists.
+- Storage path: `wwwroot/uploads/listings/{listingId}/{guid}{ext}` — GUID filenames avoid collisions and path-traversal from user-supplied names.
+- Allowed types: `.jpg`/`.jpeg`/`.png`/`.webp`, validated by file signature (magic bytes) server-side, not just extension/content-type header.
+- Limits: 5 MB per file, 8 images per listing; enforced server-side (client-side check is UX-only, not a security boundary).
+- No resizing/thumbnailing pipeline for v1 — serve the original, let CSS size the thumbnail. A resize step (e.g. `ImageSharp`) can be added later without changing the storage model.
+- Deleting a `Listing` or `ListingImage` deletes its file(s) from disk — otherwise disk usage only grows.
 
 ### Messaging
 - From a listing detail page, a non-owner can start a conversation with the owner.
@@ -69,6 +74,4 @@ erDiagram
 
 ## Open questions
 
-- Auth: cookie-based ASP.NET Identity assumed above — confirm before scaffolding `User`.
-- Image storage path/size limits not yet decided.
-- Whether search needs full-text (Postgres `tsvector`) or a simple `ILIKE` is enough for v1.
+None.
