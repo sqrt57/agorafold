@@ -1,4 +1,5 @@
 using AgoraFold.Core;
+using AgoraFold.Core.Storage;
 using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -7,6 +8,10 @@ builder.Services.AddDbContext<AppDbContext>(options =>
     options
         .UseNpgsql(builder.Configuration.GetConnectionString("Default"))
         .UseSnakeCaseNamingConvention());
+
+builder.Services.AddAgoraFoldCore();
+builder.Services.Configure<ListingImageStorageOptions>(o =>
+    o.RootPath = Path.Combine(builder.Environment.WebRootPath, "uploads", "listings"));
 
 builder.Services.AddControllersWithViews();
 
