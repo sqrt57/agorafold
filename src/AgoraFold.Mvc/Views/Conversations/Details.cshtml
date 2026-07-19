@@ -1,0 +1,37 @@
+@model ConversationThreadViewModel
+@{
+    ViewData["Title"] = "Conversation";
+}
+
+<h1>
+    <a asp-controller="Listings" asp-action="Details" asp-route-id="@Model.ListingId">@Model.ListingTitle</a>
+</h1>
+
+<div class="border rounded p-3 mb-3" style="max-height:400px;overflow-y:auto;">
+    @if (Model.Messages.Count == 0)
+    {
+        <p class="text-muted">No messages yet. Say hello!</p>
+    }
+    else
+    {
+        @foreach (var message in Model.Messages)
+        {
+            <div class="mb-2 @(message.IsMine ? "text-end" : "")">
+                <div><strong>@message.SenderDisplayName</strong> <small class="text-muted">@message.SentAt.ToString("g")</small></div>
+                <div class="d-inline-block p-2 rounded @(message.IsMine ? "bg-primary text-white" : "bg-light")">@message.Body</div>
+            </div>
+        }
+    }
+</div>
+
+<form asp-controller="Conversations" asp-action="Reply" asp-route-id="@Model.Id" method="post">
+    <div class="mb-3">
+        <textarea asp-for="Reply.Body" class="form-control" rows="3" placeholder="Write a reply..."></textarea>
+        <span asp-validation-for="Reply.Body" class="text-danger"></span>
+    </div>
+    <button type="submit" class="btn btn-primary">Send</button>
+</form>
+
+@section Scripts {
+    @await Html.PartialAsync("_ValidationScriptsPartial")
+}

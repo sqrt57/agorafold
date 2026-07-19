@@ -1,5 +1,8 @@
 using AgoraFold.Core;
+using AgoraFold.Core.Entities;
 using AgoraFold.Core.Storage;
+using AgoraFold.Mvc.Filters;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -9,11 +12,17 @@ builder.Services.AddDbContext<AppDbContext>(options =>
         .UseNpgsql(builder.Configuration.GetConnectionString("Default"))
         .UseSnakeCaseNamingConvention());
 
+builder.Services
+    .AddIdentity<AppUser, IdentityRole>()
+    .AddEntityFrameworkStores<AppDbContext>()
+    .AddDefaultTokenProviders();
+
 builder.Services.AddAgoraFoldCore();
 builder.Services.Configure<ListingImageStorageOptions>(o =>
     o.RootPath = Path.Combine(builder.Environment.WebRootPath, "uploads", "listings"));
 
-builder.Services.AddControllersWithViews();
+builder.Services.AddControllersWithViews(options =>
+    options.Filters.Add<AgoraFoldExceptionFilter>());
 
 var app = builder.Build();
 
@@ -26,8 +35,11 @@ if (!app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
+app.UseStatusCodePagesWithReExecute("/Home/StatusCode/{0}");
+app.UseStaticFiles();
 app.UseRouting();
 
+app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapStaticAssets();

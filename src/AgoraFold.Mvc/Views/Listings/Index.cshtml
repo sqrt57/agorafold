@@ -1,0 +1,68 @@
+@model ListingIndexViewModel
+@{
+    ViewData["Title"] = "Browse Listings";
+}
+
+<h1>Browse Listings</h1>
+
+<form asp-controller="Listings" asp-action="Index" method="get" class="row g-2 mb-4">
+    <div class="col-auto">
+        <select name="categoryId" class="form-select" asp-items="Model.Categories">
+            <option value="">All categories</option>
+        </select>
+    </div>
+    <div class="col-auto">
+        <input type="text" name="searchTerm" value="@Model.SearchTerm" class="form-control" placeholder="Search title or description" />
+    </div>
+    <div class="col-auto">
+        <button type="submit" class="btn btn-primary">Search</button>
+    </div>
+</form>
+
+@if (Model.Items.Count == 0)
+{
+    <p>No listings found.</p>
+}
+else
+{
+    <div class="row row-cols-1 row-cols-md-3 g-4">
+        @foreach (var item in Model.Items)
+        {
+            <div class="col">
+                <div class="card h-100">
+                    <a asp-controller="Listings" asp-action="Details" asp-route-id="@item.Id">
+                        @if (item.ThumbnailUrl is not null)
+                        {
+                            <img src="@item.ThumbnailUrl" class="card-img-top" alt="@item.Title" style="height:180px;object-fit:cover;" />
+                        }
+                        else
+                        {
+                            <div class="bg-light d-flex align-items-center justify-content-center" style="height:180px;">No image</div>
+                        }
+                    </a>
+                    <div class="card-body">
+                        <h5 class="card-title">
+                            <a asp-controller="Listings" asp-action="Details" asp-route-id="@item.Id">@item.Title</a>
+                        </h5>
+                        <p class="card-text">@(item.Price.HasValue ? item.Price.Value.ToString("C") : "No price")</p>
+                        <p class="card-text"><small class="text-muted">@item.CategoryName</small></p>
+                    </div>
+                </div>
+            </div>
+        }
+    </div>
+}
+
+<nav class="mt-4">
+    <ul class="pagination">
+        <li class="page-item @(Model.HasPreviousPage ? "" : "disabled")">
+            <a class="page-link" asp-controller="Listings" asp-action="Index"
+               asp-route-page="@(Model.Page - 1)" asp-route-categoryId="@Model.CategoryId" asp-route-searchTerm="@Model.SearchTerm">Previous</a>
+        </li>
+        <li class="page-item disabled"><span class="page-link">Page @Model.Page of @Math.Max(Model.TotalPages, 1)</span></li>
+        <li class="page-item @(Model.HasNextPage ? "" : "disabled")">
+            <a class="page-link" asp-controller="Listings" asp-action="Index"
+               asp-route-page="@(Model.Page + 1)" asp-route-categoryId="@Model.CategoryId" asp-route-searchTerm="@Model.SearchTerm">Next</a>
+        </li>
+    </ul>
+</nav>

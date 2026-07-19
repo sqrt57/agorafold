@@ -55,5 +55,14 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : IdentityDbCo
             .WithMany()
             .HasForeignKey(m => m.SenderId)
             .OnDelete(DeleteBehavior.Restrict);
+
+        modelBuilder.Entity<Category>().HasData(
+            new Category { Id = 1, Name = "Electronics" },
+            new Category { Id = 2, Name = "Vehicles" },
+            new Category { Id = 3, Name = "Furniture" },
+            new Category { Id = 4, Name = "Clothing & Accessories" },
+            new Category { Id = 5, Name = "Home & Garden" },
+            new Category { Id = 6, Name = "Free Stuff" },
+            new Category { Id = 7, Name = "Other" });
     }
 }
