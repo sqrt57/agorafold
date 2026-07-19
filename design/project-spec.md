@@ -8,6 +8,7 @@ A classifieds board app: users post listings under categories, browse/search/fil
 
 - A working classifieds board on MVC: accounts, listings with images, search/filter, and buyer-seller messaging.
 - A domain model (`AgoraFold.Core`) reusable as-is by every future front-end variant — no MVC-specific concerns leak into it.
+- This is a learning exercise (possible portfolio piece), not a production app — no deadline. Each variant gets the full feature set (accounts/images/messaging), not just CRUD, before moving to the next. Planned order: MVC → Razor Pages → Web API + JS → HTMX → Blazor.
 
 ## Non-goals
 
