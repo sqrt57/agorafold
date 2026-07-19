@@ -1,0 +1,43 @@
+@page
+@model MineModel
+@{
+    ViewData["Title"] = "My Listings";
+}
+
+<h1>My Listings</h1>
+
+<p><a class="btn btn-primary" asp-page="/Listings/Create">Post a Listing</a></p>
+
+@if (Model.Listings.Count == 0)
+{
+    <p>You haven't posted any listings yet.</p>
+}
+else
+{
+    <table class="table">
+        <thead>
+            <tr>
+                <th>Title</th>
+                <th>Category</th>
+                <th>Price</th>
+                <th>Created</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var item in Model.Listings)
+            {
+                <tr>
+                    <td><a asp-page="/Listings/Details" asp-route-id="@item.Id">@item.Title</a></td>
+                    <td>@item.CategoryName</td>
+                    <td>@(item.Price.HasValue ? item.Price.Value.ToString("C") : "-")</td>
+                    <td>@item.CreatedAt.ToString("d")</td>
+                    <td>
+                        <a asp-page="/Listings/Edit" asp-route-id="@item.Id">Edit</a> |
+                        <a asp-page="/Listings/Delete" asp-route-id="@item.Id">Delete</a>
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}

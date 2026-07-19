@@ -1,0 +1,53 @@
+@page "{id:int}"
+@model DetailsModel
+@{
+    ViewData["Title"] = Model.Title;
+}
+
+<h1>@Model.Title</h1>
+
+@if (Model.Images.Count > 0)
+{
+    <div class="row mb-3">
+        <div class="col-md-6">
+            <img src="@Model.Images[0]" class="img-fluid mb-2" alt="@Model.Title" />
+        </div>
+    </div>
+    @if (Model.Images.Count > 1)
+    {
+        <div class="row g-2 mb-3">
+            @foreach (var image in Model.Images.Skip(1))
+            {
+                <div class="col-auto">
+                    <img src="@image" style="height:100px;object-fit:cover;" alt="@Model.Title" />
+                </div>
+            }
+        </div>
+    }
+}
+else
+{
+    <p class="text-muted">No images.</p>
+}
+
+<p>@(Model.Price.HasValue ? Model.Price.Value.ToString("C") : "No price")</p>
+<p><strong>Category:</strong> @Model.CategoryName</p>
+<p><strong>Posted by:</strong> @Model.OwnerDisplayName on @Model.CreatedAt.ToString("d")</p>
+<p>@Model.Description</p>
+
+@if (Model.IsOwner)
+{
+    <a class="btn btn-secondary" asp-page="/Listings/Edit" asp-route-id="@Model.Id">Edit</a>
+    <a class="btn btn-danger" asp-page="/Listings/Delete" asp-route-id="@Model.Id">Delete</a>
+}
+else if (Model.CanMessage)
+{
+    <form asp-page="/Listings/Details" asp-page-handler="Start" method="post">
+        <input type="hidden" name="listingId" value="@Model.Id" />
+        <button type="submit" class="btn btn-primary">Message Seller</button>
+    </form>
+}
+else if (User.Identity?.IsAuthenticated != true)
+{
+    <p><a asp-page="/Account/Login">Log in</a> to message the seller.</p>
+}

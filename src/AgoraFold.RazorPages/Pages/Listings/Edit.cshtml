@@ -1,0 +1,78 @@
+@page "{id:int}"
+@model EditModel
+@{
+    ViewData["Title"] = "Edit Listing";
+}
+
+<h1>Edit Listing</h1>
+
+@if (TempData["ImageErrors"] is string imageErrors)
+{
+    <div class="alert alert-danger">@imageErrors</div>
+}
+
+<div class="row">
+    <div class="col-md-6">
+        <form asp-page="/Listings/Edit" asp-route-id="@Model.Id" method="post">
+            <input type="hidden" asp-for="Id" />
+            <div asp-validation-summary="ModelOnly" class="text-danger"></div>
+            <div class="mb-3">
+                <label asp-for="Title" class="form-label"></label>
+                <input asp-for="Title" class="form-control" />
+                <span asp-validation-for="Title" class="text-danger"></span>
+            </div>
+            <div class="mb-3">
+                <label asp-for="Description" class="form-label"></label>
+                <textarea asp-for="Description" class="form-control" rows="5"></textarea>
+                <span asp-validation-for="Description" class="text-danger"></span>
+            </div>
+            <div class="mb-3">
+                <label asp-for="Price" class="form-label"></label>
+                <input asp-for="Price" class="form-control" />
+                <span asp-validation-for="Price" class="text-danger"></span>
+            </div>
+            <div class="mb-3">
+                <label asp-for="CategoryId" class="form-label"></label>
+                <select asp-for="CategoryId" class="form-select" asp-items="Model.Categories"></select>
+                <span asp-validation-for="CategoryId" class="text-danger"></span>
+            </div>
+            <button type="submit" class="btn btn-primary">Save</button>
+        </form>
+    </div>
+</div>
+
+<h2 class="mt-4">Images</h2>
+
+@if (Model.ExistingImages.Count == 0)
+{
+    <p class="text-muted">No images yet.</p>
+}
+else
+{
+    <div class="row g-2 mb-3">
+        @foreach (var image in Model.ExistingImages)
+        {
+            <div class="col-auto text-center">
+                <img src="@image.Url" style="height:120px;object-fit:cover;" class="d-block mb-1" alt="Listing image" />
+                <form asp-page="/Listings/Edit" asp-page-handler="DeleteImage" method="post">
+                    <input type="hidden" name="imageId" value="@image.Id" />
+                    <input type="hidden" name="listingId" value="@Model.Id" />
+                    <button type="submit" class="btn btn-sm btn-outline-danger">Delete</button>
+                </form>
+            </div>
+        }
+    </div>
+}
+
+<form asp-page="/Listings/Edit" asp-page-handler="AddImages" asp-route-id="@Model.Id" method="post" enctype="multipart/form-data" class="row g-2">
+    <div class="col-auto">
+        <input type="file" name="Images" multiple accept="image/jpeg,image/png,image/webp" class="form-control" />
+    </div>
+    <div class="col-auto">
+        <button type="submit" class="btn btn-secondary">Add Images</button>
+    </div>
+</form>
+
+@section Scripts {
+    @await Html.PartialAsync("_ValidationScriptsPartial")
+}

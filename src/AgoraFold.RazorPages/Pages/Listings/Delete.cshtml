@@ -1,0 +1,19 @@
+@page "{id:int}"
+@model DeleteModel
+@{
+    ViewData["Title"] = "Delete Listing";
+}
+
+<h1>Delete Listing</h1>
+
+<p>Are you sure you want to delete <strong>@Model.Title</strong>? This cannot be undone.</p>
+
+@if (Model.ThumbnailUrl is not null)
+{
+    <img src="@Model.ThumbnailUrl" style="height:150px;object-fit:cover;" alt="@Model.Title" class="mb-3 d-block" />
+}
+
+<form asp-page="/Listings/Delete" method="post">
+    <button type="submit" class="btn btn-danger">Delete</button>
+    <a class="btn btn-secondary" asp-page="/Listings/Details" asp-route-id="@Model.Id">Cancel</a>
+</form>

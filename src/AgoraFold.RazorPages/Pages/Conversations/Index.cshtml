@@ -1,0 +1,31 @@
+@page
+@model IndexModel
+@{
+    ViewData["Title"] = "Inbox";
+}
+
+<h1>Inbox</h1>
+
+@if (Model.Conversations.Count == 0)
+{
+    <p>No conversations yet.</p>
+}
+else
+{
+    <div class="list-group">
+        @foreach (var item in Model.Conversations)
+        {
+            <a class="list-group-item list-group-item-action" asp-page="/Conversations/Details" asp-route-id="@item.Id">
+                <div class="d-flex justify-content-between">
+                    <strong>@item.ListingTitle</strong>
+                    <small class="text-muted">@item.LastMessageAt.ToString("g")</small>
+                </div>
+                <div class="text-muted">With @item.OtherPartyDisplayName</div>
+                @if (item.LastMessagePreview is not null)
+                {
+                    <div>@(item.IsLastMessageMine ? "You: " : "")@item.LastMessagePreview</div>
+                }
+            </a>
+        }
+    </div>
+}
