@@ -3,5 +3,6 @@
     <Project Path="src/AgoraFold.Core/AgoraFold.Core.csproj" />
     <Project Path="src/AgoraFold.Mvc/AgoraFold.Mvc.csproj" />
     <Project Path="src/AgoraFold.RazorPages/AgoraFold.RazorPages.csproj" />
+    <Project Path="src/AgoraFold.WebApi/AgoraFold.WebApi.csproj" />
   </Folder>
 </Solution>

@@ -42,6 +42,8 @@ bld/
 
 # User-uploaded listing images (runtime data, not build output)
 src/AgoraFold.Mvc/wwwroot/uploads/
+src/AgoraFold.RazorPages/wwwroot/uploads/
+src/AgoraFold.WebApi/wwwroot/uploads/
 
 # Visual Studio 2017 auto generated files
 Generated\ Files/
