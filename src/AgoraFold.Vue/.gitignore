@@ -12,6 +12,10 @@ dist
 dist-ssr
 *.local
 
+# No secrets in this project's .env (just VITE_API_BASE_URL) — override the
+# root .gitignore's blanket ".env" rule so it's tracked like appsettings.json.
+!.env
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
