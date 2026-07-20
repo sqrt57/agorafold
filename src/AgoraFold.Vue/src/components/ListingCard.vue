@@ -1,9 +1,10 @@
-<script setup>
+<script setup lang="ts">
 import { imageUrl } from '../api/client'
+import type { ListingSummary } from '../api/types'
 
-defineProps({
-  listing: { type: Object, required: true },
-})
+defineProps<{
+  listing: ListingSummary
+}>()
 </script>
 
 <template>

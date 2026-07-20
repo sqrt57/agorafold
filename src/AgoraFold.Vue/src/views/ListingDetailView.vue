@@ -1,35 +1,38 @@
-<script setup>
+<script setup lang="ts">
 import { ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import * as listingsApi from '../api/listings'
 import * as conversationsApi from '../api/conversations'
 import { imageUrl } from '../api/client'
+import type { ListingDetail } from '../api/types'
 
 const route = useRoute()
 const router = useRouter()
 
-const listing = ref(null)
+const listing = ref<ListingDetail | null>(null)
 const messaging = ref(false)
 const error = ref('')
 
 async function load() {
-  listing.value = await listingsApi.getDetail(route.params.id)
+  listing.value = await listingsApi.getDetail(route.params.id as string)
 }
 
 async function deleteListing() {
+  if (!listing.value) return
   if (!confirm(`Delete "${listing.value.title}"? This cannot be undone.`)) return
   await listingsApi.remove(listing.value.id)
   router.push({ name: 'listing-mine' })
 }
 
 async function messageSeller() {
+  if (!listing.value) return
   messaging.value = true
   error.value = ''
   try {
     const thread = await conversationsApi.start(listing.value.id)
     router.push({ name: 'conversation-thread', params: { id: thread.id } })
   } catch (err) {
-    error.value = err.message
+    error.value = (err as Error).message
   } finally {
     messaging.value = false
   }

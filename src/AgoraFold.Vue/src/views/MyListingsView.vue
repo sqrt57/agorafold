@@ -1,9 +1,10 @@
-<script setup>
+<script setup lang="ts">
 import { ref } from 'vue'
 import * as listingsApi from '../api/listings'
 import ListingCard from '../components/ListingCard.vue'
+import type { ListingSummary } from '../api/types'
 
-const listings = ref([])
+const listings = ref<ListingSummary[]>([])
 
 listingsApi.getMine().then((data) => (listings.value = data))
 </script>

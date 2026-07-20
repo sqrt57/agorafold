@@ -1,8 +1,9 @@
-<script setup>
+<script setup lang="ts">
 import { ref } from 'vue'
 import * as conversationsApi from '../api/conversations'
+import type { ConversationSummary } from '../api/types'
 
-const conversations = ref([])
+const conversations = ref<ConversationSummary[]>([])
 
 conversationsApi.getInbox().then((data) => (conversations.value = data))
 </script>

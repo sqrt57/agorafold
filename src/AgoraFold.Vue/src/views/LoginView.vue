@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 import { ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
@@ -18,9 +18,9 @@ async function submit() {
   error.value = ''
   try {
     await auth.login(email.value, password.value, rememberMe.value)
-    router.push(route.query.returnUrl || { name: 'browse' })
+    router.push((route.query.returnUrl as string) || { name: 'browse' })
   } catch (err) {
-    error.value = err.message
+    error.value = (err as Error).message
   } finally {
     submitting.value = false
   }

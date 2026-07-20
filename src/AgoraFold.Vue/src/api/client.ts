@@ -6,7 +6,7 @@ const MUTATING_METHODS = new Set(['POST', 'PUT', 'DELETE', 'PATCH'])
 // user) was active when it was issued — a token fetched before login/register/logout
 // is rejected on the next mutating call once the identity changes. So this is fetched
 // fresh per mutating request rather than cached.
-async function getCsrfToken() {
+async function getCsrfToken(): Promise<string> {
   const response = await fetch(`${API_BASE_URL}/api/antiforgery/token`, {
     credentials: 'include',
   })
@@ -15,33 +15,41 @@ async function getCsrfToken() {
     throw new Error('Failed to obtain a CSRF token.')
   }
 
-  const { token } = await response.json()
+  const { token } = (await response.json()) as { token: string }
   return token
 }
 
 export class ApiError extends Error {
-  constructor(status, errors) {
+  status: number
+  errors: string[]
+
+  constructor(status: number, errors?: string[]) {
     super(errors?.[0] ?? `Request failed with status ${status}`)
     this.status = status
     this.errors = errors ?? []
   }
 }
 
-export function imageUrl(path) {
-  return path ? `${API_BASE_URL}${path}` : path
+export function imageUrl(path: string | null | undefined): string | undefined {
+  return path ? `${API_BASE_URL}${path}` : undefined
 }
 
-/**
- * @param {string} path
- * @param {{ method?: string, body?: unknown, isForm?: boolean }} [options]
- */
-export async function apiFetch(path, { method = 'GET', body, isForm = false } = {}) {
-  const headers = {}
-  let requestBody
+interface ApiFetchOptions {
+  method?: string
+  body?: unknown
+  isForm?: boolean
+}
+
+export async function apiFetch<T>(
+  path: string,
+  { method = 'GET', body, isForm = false }: ApiFetchOptions = {},
+): Promise<T> {
+  const headers: Record<string, string> = {}
+  let requestBody: BodyInit | undefined
 
   if (body !== undefined) {
     if (isForm) {
-      requestBody = body
+      requestBody = body as FormData
     } else {
       headers['Content-Type'] = 'application/json'
       requestBody = JSON.stringify(body)
@@ -60,7 +68,7 @@ export async function apiFetch(path, { method = 'GET', body, isForm = false } = 
   })
 
   if (response.status === 204) {
-    return null
+    return null as T
   }
 
   const contentType = response.headers.get('content-type') ?? ''
@@ -70,5 +78,5 @@ export async function apiFetch(path, { method = 'GET', body, isForm = false } = 
     throw new ApiError(response.status, data?.errors)
   }
 
-  return data
+  return data as T
 }

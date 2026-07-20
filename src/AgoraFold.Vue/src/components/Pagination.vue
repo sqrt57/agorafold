@@ -1,12 +1,14 @@
-<script setup>
-const props = defineProps({
-  page: { type: Number, required: true },
-  totalPages: { type: Number, required: true },
-  hasPreviousPage: { type: Boolean, required: true },
-  hasNextPage: { type: Boolean, required: true },
-})
+<script setup lang="ts">
+const props = defineProps<{
+  page: number
+  totalPages: number
+  hasPreviousPage: boolean
+  hasNextPage: boolean
+}>()
 
-const emit = defineEmits(['change'])
+const emit = defineEmits<{
+  change: [page: number]
+}>()
 </script>
 
 <template>

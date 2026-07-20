@@ -1,7 +1,8 @@
-<script setup>
+<script setup lang="ts">
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
+import { ApiError } from '../api/client'
 
 const router = useRouter()
 const auth = useAuthStore()
@@ -9,7 +10,7 @@ const auth = useAuthStore()
 const email = ref('')
 const displayName = ref('')
 const password = ref('')
-const errors = ref([])
+const errors = ref<string[]>([])
 const submitting = ref(false)
 
 async function submit() {
@@ -19,7 +20,7 @@ async function submit() {
     await auth.register(email.value, displayName.value, password.value)
     router.push({ name: 'browse' })
   } catch (err) {
-    errors.value = err.errors?.length ? err.errors : [err.message]
+    errors.value = err instanceof ApiError && err.errors.length ? err.errors : [(err as Error).message]
   } finally {
     submitting.value = false
   }
