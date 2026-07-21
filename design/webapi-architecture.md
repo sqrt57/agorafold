@@ -2,7 +2,7 @@
 
 ## Summary
 
-The JSON API backend for the "Web API + JS frontend" family of variants. Consumed by `AgoraFold.Vue` (Vite/Vue 3 + TypeScript SPA), `AgoraFold.React` (Vite/React + TypeScript SPA), and `AgoraFold.Svelte` (Vite/Svelte + TypeScript SPA); the planned Angular and SolidJS variants will consume this same API rather than getting their own backend, so the auth/CORS/CSRF design below applies to all of them. Ports: `http://localhost:5155`, `https://localhost:7131` (Vue dev server: `http://localhost:5173`, React dev server: `http://localhost:5174`, Svelte dev server: `http://localhost:5175`).
+The JSON API backend for the "Web API + JS frontend" family of variants. Consumed by `AgoraFold.Vue` (Vite/Vue 3 + TypeScript SPA), `AgoraFold.React` (Vite/React + TypeScript SPA), `AgoraFold.Svelte` (Vite/Svelte + TypeScript SPA), and `AgoraFold.Angular` (Angular CLI + TypeScript SPA); the planned SolidJS variant will consume this same API rather than getting their own backend, so the auth/CORS/CSRF design below applies to all of them. Ports: `http://localhost:5155`, `https://localhost:7131` (Vue dev server: `http://localhost:5173`, React dev server: `http://localhost:5174`, Svelte dev server: `http://localhost:5175`, Angular dev server: `http://localhost:5176`).
 
 No separate spec doc exists for this variant — it predates the current per-variant `-spec.md` convention. This document is the architecture reference; new JS frontend variants should link back here rather than re-documenting the backend.
 
@@ -29,13 +29,21 @@ No separate spec doc exists for this variant — it predates the current per-var
 - It ports the same `src/api/*.ts` contract and global CSS, using Svelte stores for authentication and a small history-based router so the feature URLs remain identical across the JS clients.
 - Its dev server runs at `http://localhost:5175`; the API origin is configured through `VITE_API_BASE_URL` in `.env`.
 
+## Angular client specifics
+
+- `AgoraFold.Angular` is a frontend-only Angular CLI project (`ng new`, standalone components, no NgModules), like the other three, and is not added to `AgoraFold.slnx`.
+- It ports the same `src/api/*.ts` contract as an injectable `ApiClient` service (`src/app/api/client.ts`) plus per-feature services (`AccountApi`, `CategoriesApi`, `ListingsApi`, `ConversationsApi`), and the same global CSS unmodified as `src/styles.css`.
+- Auth/hydration state lives in an injectable `AuthService` (`src/app/auth/auth.service.ts`) using signals for `user`/`hydrated`, with the same memoized-hydrate-promise pattern the other clients use to dedupe the initial `/api/account/me` call.
+- Unlike the other three clients' hand-rolled routers, `AgoraFold.Angular` uses the real Angular Router (`src/app/app.routes.ts`) — protected routes carry a functional `authGuard: CanActivateFn` that awaits `AuthService.hydrate()` before deciding, redirecting to `/login?returnUrl=...` on failure, same as the others' behavior.
+- Its dev server runs at `http://localhost:5176` (`ng serve`, configured for this fixed port in `angular.json`); a `proxy.conf.json` forwards `/api` and `/uploads` to `AgoraFold.WebApi` at `http://localhost:5155`, and `environment.apiBaseUrl` (empty string in dev, same pattern as the other clients' `VITE_API_BASE_URL`) is prefixed onto image URLs by the ported `imageUrl()` helper.
+
 ## Auth
 
 Cookie-based `AddIdentity`, but `ConfigureApplicationCookie`'s `OnRedirectToLogin`/`OnRedirectToAccessDenied` events are overridden to return raw 401/403 instead of Identity's default 302-to-a-login-page — without this, every `[Authorize]` failure would come back as a redirect the SPA can't sensibly follow.
 
 ## CORS
 
-`AddCors`/`UseCors` (registered before `UseAuthentication`) allows a configurable list of JS client dev origins (`Cors:JsClientOrigins` in `appsettings.json`, currently Vue's `5173`, React's `5174`, and Svelte's `5175`) with `AllowCredentials()`. Each new JS variant needs its own dev origin added to that array.
+`AddCors`/`UseCors` (registered before `UseAuthentication`) allows a configurable list of JS client dev origins (`Cors:JsClientOrigins` in `appsettings.json`, currently Vue's `5173`, React's `5174`, Svelte's `5175`, and Angular's `5176`) with `AllowCredentials()`. Each new JS variant needs its own dev origin added to that array.
 
 ## CSRF
 
@@ -43,7 +51,7 @@ Parity with Mvc/RazorPages's `[ValidateAntiForgeryToken]` uses a custom `Filters
 
 A `GET /api/antiforgery/token` endpoint (`AntiforgeryController`) hands the client a token to echo back as `X-CSRF-TOKEN`.
 
-**Non-obvious gotcha**: ASP.NET's antiforgery token is bound to whichever identity (anonymous or a specific user) was active when it was issued, so the Vue, React, and Svelte clients' `src/api/client.ts` fetch a fresh token before every mutating request rather than caching one — a token cached from before login/register/logout gets rejected on the next mutating call once the identity changes. Any future JS frontend consuming this API needs the same fetch-fresh-token-per-mutation pattern.
+**Non-obvious gotcha**: ASP.NET's antiforgery token is bound to whichever identity (anonymous or a specific user) was active when it was issued, so the Vue, React, Svelte, and Angular clients' `src/api/client.ts` fetch a fresh token before every mutating request rather than caching one — a token cached from before login/register/logout gets rejected on the next mutating call once the identity changes. Any future JS frontend consuming this API needs the same fetch-fresh-token-per-mutation pattern.
 
 ## Gotchas
 
