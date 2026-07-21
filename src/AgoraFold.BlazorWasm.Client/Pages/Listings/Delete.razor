@@ -1,0 +1,59 @@
+@page "/Listings/Delete/{Id:int}"
+@attribute [Authorize]
+@rendermode @(new InteractiveWebAssemblyRenderMode(prerender: false))
+@inject ListingApiClient ListingApi
+@inject NavigationManager Navigation
+
+<DomainErrorAlert Error="_error" />
+
+@if (_listing is not null)
+{
+    <h1>Delete Listing</h1>
+    <p>Are you sure you want to delete <strong>@_listing.Title</strong>? This cannot be undone.</p>
+    @if (_thumbnailUrl is not null)
+    {
+        <img src="@_thumbnailUrl" alt="@_listing.Title" class="img-thumbnail mb-3" style="max-width: 200px;" />
+    }
+    <div>
+        <button class="btn btn-danger" @onclick="ConfirmAsync">Delete</button>
+        <a class="btn btn-secondary" href="/Listings/@_listing.Id">Cancel</a>
+    </div>
+}
+
+@code {
+    [Parameter]
+    public int Id { get; set; }
+
+    private Exception? _error;
+    private ListingDetailResponse? _listing;
+    private string? _thumbnailUrl;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _error = null;
+        _listing = null;
+
+        try
+        {
+            var listing = await ListingApi.GetDetailAsync(Id);
+            if (!listing.IsOwner)
+            {
+                throw new ApiForbiddenException();
+            }
+
+            _listing = listing;
+            _thumbnailUrl = listing.Images.Count > 0 ? listing.Images[0].Url : null;
+        }
+        catch (Exception ex) when (ex is ApiNotFoundException or ApiForbiddenException)
+        {
+            _error = ex;
+            _listing = null;
+        }
+    }
+
+    private async Task ConfirmAsync()
+    {
+        await ListingApi.DeleteAsync(Id);
+        Navigation.NavigateTo("/Listings/Mine");
+    }
+}

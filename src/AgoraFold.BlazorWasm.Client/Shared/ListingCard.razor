@@ -1,0 +1,30 @@
+<div class="col">
+    <div class="card h-100">
+        @if (ThumbnailUrl is not null)
+        {
+            <img src="@ThumbnailUrl" class="card-img-top" alt="@Title" style="object-fit: cover; height: 180px;" />
+        }
+        <div class="card-body">
+            <h5 class="card-title"><a href="/Listings/@Id">@Title</a></h5>
+            <p class="card-text">@(Price is null ? "Free" : Price.Value.ToString("C"))</p>
+            <p class="card-text text-muted">@CategoryName</p>
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter, EditorRequired]
+    public int Id { get; set; }
+
+    [Parameter, EditorRequired]
+    public string Title { get; set; } = "";
+
+    [Parameter]
+    public decimal? Price { get; set; }
+
+    [Parameter, EditorRequired]
+    public string CategoryName { get; set; } = "";
+
+    [Parameter]
+    public string? ThumbnailUrl { get; set; }
+}

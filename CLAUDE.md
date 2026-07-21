@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-A classifieds board app used as a showroom for ASP.NET web rendering models. One shared `AgoraFold.Core` (EF Core + PostgreSQL domain model plus a business/service layer) powers multiple independent front-end variants, each built with a different ASP.NET approach: MVC, Razor Pages, Blazor Server, Blazor WebAssembly, Web API + Vue, HTMX, and Web API paired with React, Svelte, Angular, and SolidJS frontends. MVC, Razor Pages, Web API + Vue, HTMX, and Blazor Server are implemented so far, each with the full feature set (accounts, listings with images, browse/search, buyer-seller messaging).
+A classifieds board app used as a showroom for ASP.NET web rendering models. One shared `AgoraFold.Core` (EF Core + PostgreSQL domain model plus a business/service layer) powers multiple independent front-end variants, each built with a different ASP.NET approach: MVC, Razor Pages, Blazor Server, Blazor WebAssembly, Web API + Vue, HTMX, and Web API paired with React, Svelte, Angular, and SolidJS frontends. MVC, Razor Pages, Web API + Vue, HTMX, Blazor Server, and Blazor WebAssembly are implemented so far, each with the full feature set (accounts, listings with images, browse/search, buyer-seller messaging).
 
 This is a learning exercise / portfolio piece, not a production app — no deadline. Each variant gets the full feature set (accounts, images, messaging) before moving to the next. Planned build order: MVC → Razor Pages → Web API + Vue → HTMX → Blazor Server → Blazor WebAssembly → Web API + React → Web API + Svelte → Web API + Angular → Web API + SolidJS.
 
@@ -27,6 +27,7 @@ dotnet run --project src/AgoraFold.RazorPages   # http://localhost:5153, https:/
 dotnet run --project src/AgoraFold.WebApi       # http://localhost:5155, https://localhost:7131
 dotnet run --project src/AgoraFold.Htmx         # http://localhost:5157, https://localhost:7133
 dotnet run --project src/AgoraFold.BlazorServer # http://localhost:5159, https://localhost:7135
+dotnet run --project src/AgoraFold.BlazorWasm   # http://localhost:5161, https://localhost:7137
 ```
 
 The Web API variant needs its Vue client running alongside it:
@@ -57,7 +58,8 @@ There is no test project yet.
 - **`AgoraFold.WebApi`** + **`AgoraFold.Vue`** — the Web API + Vue variant: a JSON API project plus a separate Vite/Vue 3 + TypeScript SPA (not a `.slnx` project) that consumes it. The backend's auth/CORS/CSRF design is shared by every future Web API + JS frontend (React, Svelte, Angular, SolidJS planned), not just Vue. Full architecture notes: `design/webapi-architecture.md`.
 - **`AgoraFold.Htmx`** — the HTMX front-end variant, MVC-paired (controllers + Razor views, own `wwwroot`/uploads, own ports) like `AgoraFold.Mvc`, but interaction-heavy flows swap HTML fragments in place instead of doing full page navigations. Full architecture notes: `design/htmx-architecture.md`.
 - **`AgoraFold.BlazorServer`** — the Blazor Server front-end variant, built on the .NET 8+ "Blazor Web App" template shape (Interactive Server render mode over a persistent SignalR circuit, not the legacy pre-.NET-8 "Blazor Server" template), own `wwwroot`/uploads, own ports. Full architecture notes and gotchas: `design/blazor-server-architecture.md`.
-- Each future variant will be its own project alongside the existing ones, added to `AgoraFold.slnx`. Blazor WebAssembly depends on the same `AgoraFold.Core` (services included) like the other Blazor/Razor variants. The React, Svelte, Angular, and SolidJS variants are frontend-only SPAs analogous to `AgoraFold.Vue` — each its own `src/AgoraFold.<Framework>` client (not a `.slnx` project, same as Vue) consuming the existing `AgoraFold.WebApi` rather than getting its own API backend.
+- **`AgoraFold.BlazorWasm`** + **`AgoraFold.BlazorWasm.Client`** — the Blazor WebAssembly front-end variant: a hosted-WASM project pair (`dotnet new blazor --interactivity WebAssembly` shape), unlike the future React/Svelte/Angular/SolidJS variants, gets its own backend referencing `AgoraFold.Core` directly rather than consuming `AgoraFold.WebApi`. `AgoraFold.BlazorWasm` (host) owns Identity/`AppDbContext`/`AddAgoraFoldCore()` plus a hand-rolled JSON API mirroring `AgoraFold.WebApi`'s controllers/CSRF pattern; `AgoraFold.BlazorWasm.Client` is the browser-side WASM assembly (pages, HttpClient-based API wrappers, a custom `AuthenticationStateProvider`) with no reference to Core. Full architecture notes and gotchas: `design/blazor-wasm-architecture.md`.
+- Each future variant will be its own project alongside the existing ones, added to `AgoraFold.slnx`. The React, Svelte, Angular, and SolidJS variants are frontend-only SPAs analogous to `AgoraFold.Vue` — each its own `src/AgoraFold.<Framework>` client (not a `.slnx` project, same as Vue) consuming the existing `AgoraFold.WebApi` rather than getting its own API backend.
 
 ### Domain model
 

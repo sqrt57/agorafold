@@ -1,0 +1,25 @@
+@using AgoraFold.BlazorWasm.Client.Layout
+@inherits LayoutComponentBase
+
+<header>
+    <nav class="navbar navbar-expand-sm navbar-light bg-white border-bottom mb-3">
+        <div class="container-fluid">
+            <a class="navbar-brand" href="/">AgoraFold.BlazorWasm</a>
+            <div class="collapse navbar-collapse d-sm-inline-flex justify-content-between">
+                <AuthNav />
+            </div>
+        </div>
+    </nav>
+</header>
+
+<div class="container">
+    <main class="pb-3">
+        @Body
+    </main>
+</div>
+
+<footer class="border-top footer text-muted">
+    <div class="container">
+        &copy; 2026 - AgoraFold.BlazorWasm
+    </div>
+</footer>

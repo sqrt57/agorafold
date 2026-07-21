@@ -1,0 +1,13 @@
+@inject NavigationManager Navigation
+
+@code {
+    // Unlike BlazorServer's equivalent, no forceLoad: this fires either during the initial static
+    // server pass (before WASM boots, where NavigateTo already produces a real HTTP redirect) or
+    // from an already-booted WASM context navigating to another interactive page - no render-mode
+    // boundary to force a reload across either way.
+    protected override void OnInitialized()
+    {
+        var returnUrl = Uri.EscapeDataString(Navigation.ToBaseRelativePath(Navigation.Uri));
+        Navigation.NavigateTo($"/Account/Login?returnUrl={returnUrl}");
+    }
+}

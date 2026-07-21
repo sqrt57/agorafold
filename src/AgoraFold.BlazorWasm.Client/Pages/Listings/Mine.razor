@@ -1,0 +1,35 @@
+@page "/Listings/Mine"
+@attribute [Authorize]
+@rendermode @(new InteractiveWebAssemblyRenderMode(prerender: false))
+@inject ListingApiClient ListingApi
+
+<PageTitle>My Listings</PageTitle>
+<h1>My Listings</h1>
+
+@if (_listings is null)
+{
+    <p>Loading...</p>
+}
+else if (_listings.Count == 0)
+{
+    <p>You haven't posted any listings yet. <a href="/Listings/Create">Post one</a>.</p>
+}
+else
+{
+    <div class="row row-cols-1 row-cols-md-3 g-3">
+        @foreach (var listing in _listings)
+        {
+            <ListingCard Id="listing.Id" Title="@listing.Title" Price="listing.Price"
+                         CategoryName="@listing.CategoryName" ThumbnailUrl="@listing.ThumbnailUrl" />
+        }
+    </div>
+}
+
+@code {
+    private IReadOnlyList<ListingSummaryResponse>? _listings;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _listings = await ListingApi.GetMineAsync();
+    }
+}

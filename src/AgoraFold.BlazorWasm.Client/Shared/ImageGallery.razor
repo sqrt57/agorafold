@@ -1,0 +1,28 @@
+@if (Images.Count > 0)
+{
+    <div class="row row-cols-2 row-cols-md-4 g-2 mb-3">
+        @foreach (var image in Images)
+        {
+            <div class="col">
+                <div class="position-relative">
+                    <img src="@image.Url" class="img-fluid rounded" alt="Listing image" />
+                    @if (OnDelete.HasDelegate)
+                    {
+                        <button type="button" class="btn btn-sm btn-danger position-absolute top-0 end-0 m-1"
+                                @onclick="() => OnDelete.InvokeAsync(image.Id)">&times;</button>
+                    }
+                </div>
+            </div>
+        }
+    </div>
+}
+
+@code {
+    [Parameter, EditorRequired]
+    public IReadOnlyList<ImageEntry> Images { get; set; } = [];
+
+    [Parameter]
+    public EventCallback<int> OnDelete { get; set; }
+
+    public sealed record ImageEntry(int Id, string Url);
+}

@@ -6,5 +6,7 @@
     <Project Path="src/AgoraFold.WebApi/AgoraFold.WebApi.csproj" />
     <Project Path="src/AgoraFold.Htmx/AgoraFold.Htmx.csproj" />
     <Project Path="src/AgoraFold.BlazorServer/AgoraFold.BlazorServer.csproj" />
+    <Project Path="src/AgoraFold.BlazorWasm/AgoraFold.BlazorWasm.csproj" />
+    <Project Path="src/AgoraFold.BlazorWasm.Client/AgoraFold.BlazorWasm.Client.csproj" />
   </Folder>
 </Solution>

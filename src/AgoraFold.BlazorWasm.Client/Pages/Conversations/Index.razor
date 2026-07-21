@@ -1,0 +1,44 @@
+@page "/Conversations"
+@attribute [Authorize]
+@rendermode @(new InteractiveWebAssemblyRenderMode(prerender: false))
+@inject ConversationApiClient ConversationApi
+
+<PageTitle>Inbox</PageTitle>
+<h1>Inbox</h1>
+
+@if (_conversations is null)
+{
+    <p>Loading...</p>
+}
+else if (_conversations.Count == 0)
+{
+    <p>No conversations yet.</p>
+}
+else
+{
+    <div class="list-group">
+        @foreach (var conversation in _conversations)
+        {
+            <a class="list-group-item list-group-item-action" href="/Conversations/@conversation.Id">
+                <div class="d-flex justify-content-between">
+                    <strong>@conversation.ListingTitle</strong>
+                    <small class="text-muted">@conversation.LastActivityAt.ToLocalTime().ToString("g")</small>
+                </div>
+                <div>@conversation.OtherPartyDisplayName</div>
+                @if (conversation.LastMessageBody is not null)
+                {
+                    <div class="text-muted text-truncate">@(conversation.LastMessageIsMine ? "You: " : "")@conversation.LastMessageBody</div>
+                }
+            </a>
+        }
+    </div>
+}
+
+@code {
+    private IReadOnlyList<ConversationSummaryResponse>? _conversations;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _conversations = await ConversationApi.GetInboxAsync();
+    }
+}

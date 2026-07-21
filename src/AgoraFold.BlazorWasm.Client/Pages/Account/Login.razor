@@ -1,0 +1,79 @@
+@page "/Account/Login"
+@rendermode @(new InteractiveWebAssemblyRenderMode(prerender: false))
+@inject AccountApiClient AccountApi
+@inject AuthenticationStateProvider AuthProvider
+@inject CurrentUserAccessor CurrentUser
+@inject NavigationManager Navigation
+
+<PageTitle>Log in</PageTitle>
+<h1>Log in</h1>
+<ErrorList Errors="_errors" />
+
+<EditForm Model="_input" OnValidSubmit="LoginAsync">
+    <DataAnnotationsValidator />
+    <div class="mb-3">
+        <label for="email" class="form-label">Email</label>
+        <InputText id="email" @bind-Value="_input.Email" class="form-control" autocomplete="username" />
+        <ValidationMessage For="() => _input.Email" class="text-danger" />
+    </div>
+    <div class="mb-3">
+        <label for="password" class="form-label">Password</label>
+        <InputText id="password" type="password" @bind-Value="_input.Password" class="form-control" autocomplete="current-password" />
+        <ValidationMessage For="() => _input.Password" class="text-danger" />
+    </div>
+    <div class="mb-3 form-check">
+        <InputCheckbox id="remember-me" @bind-Value="_input.RememberMe" class="form-check-input" />
+        <label for="remember-me" class="form-check-label">Remember me?</label>
+    </div>
+    <button type="submit" class="btn btn-primary">Log in</button>
+</EditForm>
+
+<p class="mt-3">
+    <a href="/Account/Register">Register as a new user</a>
+</p>
+
+@code {
+    [SupplyParameterFromQuery]
+    private string? ReturnUrl { get; set; }
+
+    private readonly LoginInput _input = new();
+    private string[] _errors = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (await CurrentUser.GetUserIdAsync() is not null)
+        {
+            Navigation.NavigateTo("/");
+        }
+    }
+
+    private async Task LoginAsync()
+    {
+        try
+        {
+            var user = await AccountApi.LoginAsync(new LoginRequest(_input.Email, _input.Password, _input.RememberMe));
+            ((CookieAuthenticationStateProvider)AuthProvider).MarkAuthenticated(user);
+            Navigation.NavigateTo(LocalRedirectUrl());
+        }
+        catch (ApiValidationException ex)
+        {
+            _errors = ex.Errors.ToArray();
+        }
+    }
+
+    // Guards against an open redirect via a crafted returnUrl (e.g. "//evil.example").
+    private string LocalRedirectUrl() =>
+        !string.IsNullOrEmpty(ReturnUrl) && ReturnUrl.StartsWith('/') && !ReturnUrl.StartsWith("//")
+            ? ReturnUrl
+            : "/";
+
+    private sealed class LoginInput
+    {
+        [Required, EmailAddress]
+        public string Email { get; set; } = "";
+        [Required, DataType(DataType.Password)]
+        public string Password { get; set; } = "";
+        [Display(Name = "Remember me?")]
+        public bool RememberMe { get; set; }
+    }
+}

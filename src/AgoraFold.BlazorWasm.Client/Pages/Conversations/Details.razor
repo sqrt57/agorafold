@@ -1,0 +1,77 @@
+@page "/Conversations/{Id:int}"
+@attribute [Authorize]
+@rendermode @(new InteractiveWebAssemblyRenderMode(prerender: false))
+@inject ConversationApiClient ConversationApi
+
+<DomainErrorAlert Error="_error" />
+
+@if (_conversation is not null)
+{
+    <h1>@_conversation.ListingTitle</h1>
+
+    <div class="mb-3">
+        @foreach (var message in _conversation.Messages)
+        {
+            <div class="mb-2 d-flex @(message.IsMine ? "justify-content-end" : "justify-content-start")">
+                <div class="p-2 rounded @(message.IsMine ? "bg-primary text-white" : "bg-light")" style="max-width: 70%;">
+                    <div>@message.Body</div>
+                    <small class="@(message.IsMine ? "text-white-50" : "text-muted")">@message.SentAt.ToLocalTime().ToString("g")</small>
+                </div>
+            </div>
+        }
+    </div>
+
+    <ErrorList Errors="_errors" />
+
+    <EditForm Model="_input" OnValidSubmit="ReplyAsync">
+        <DataAnnotationsValidator />
+        <div class="mb-3">
+            <InputTextArea class="form-control" rows="3" @bind-Value="_input.Body" placeholder="Write a reply..." />
+            <ValidationMessage For="() => _input.Body" class="text-danger" />
+        </div>
+        <button type="submit" class="btn btn-primary">Reply</button>
+    </EditForm>
+}
+
+@code {
+    [Parameter]
+    public int Id { get; set; }
+
+    private Exception? _error;
+    private ConversationThreadResponse? _conversation;
+    private readonly ReplyInput _input = new();
+    private string[] _errors = [];
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _error = null;
+        _conversation = null;
+        try
+        {
+            _conversation = await ConversationApi.GetThreadAsync(Id);
+        }
+        catch (Exception ex) when (ex is ApiNotFoundException or ApiForbiddenException)
+        {
+            _error = ex;
+        }
+    }
+
+    private async Task ReplyAsync()
+    {
+        try
+        {
+            _conversation = await ConversationApi.ReplyAsync(Id, _input.Body);
+            _input.Body = "";
+        }
+        catch (ApiValidationException ex)
+        {
+            _errors = ex.Errors.ToArray();
+        }
+    }
+
+    private sealed class ReplyInput
+    {
+        [Required, StringLength(4000)]
+        public string Body { get; set; } = "";
+    }
+}

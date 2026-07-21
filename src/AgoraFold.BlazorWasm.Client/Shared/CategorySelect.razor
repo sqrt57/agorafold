@@ -1,0 +1,38 @@
+@using AgoraFold.BlazorWasm.Client.Api.Dto.Categories
+
+<select class="form-select" value="@SelectedCategoryId" @onchange="OnChangedAsync">
+    @if (IncludeAnyOption)
+    {
+        <option value="">All categories</option>
+    }
+    @foreach (var category in Categories)
+    {
+        <option value="@category.Id">@category.Name</option>
+    }
+</select>
+
+@code {
+    // Categories are supplied by the parent (fetched once) rather than self-fetched here - ported
+    // as-is from BlazorServer's convention for parity, though the original reason (a self-fetching
+    // child racing a parent's own in-flight query against a shared Scoped DbContext) doesn't apply
+    // here: each ApiClient call is an independent HTTP request, no shared DbContext to race.
+    [Parameter, EditorRequired]
+    public IReadOnlyList<CategoryResponse> Categories { get; set; } = [];
+
+    [Parameter]
+    public int? SelectedCategoryId { get; set; }
+
+    [Parameter]
+    public EventCallback<int?> SelectedCategoryIdChanged { get; set; }
+
+    [Parameter]
+    public bool IncludeAnyOption { get; set; }
+
+    private async Task OnChangedAsync(ChangeEventArgs e)
+    {
+        var value = e.Value?.ToString();
+        var newId = string.IsNullOrEmpty(value) ? (int?)null : int.Parse(value);
+        SelectedCategoryId = newId;
+        await SelectedCategoryIdChanged.InvokeAsync(newId);
+    }
+}
