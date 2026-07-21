@@ -64,6 +64,18 @@ A `GET /api/antiforgery/token` endpoint (`AntiforgeryController`) hands the clie
 
 **Non-obvious gotcha**: ASP.NET's antiforgery token is bound to whichever identity (anonymous or a specific user) was active when it was issued, so the Vue, React, Svelte, and Angular clients' `src/api/client.ts` fetch a fresh token before every mutating request rather than caching one — a token cached from before login/register/logout gets rejected on the next mutating call once the identity changes. Any future JS frontend consuming this API needs the same fetch-fresh-token-per-mutation pattern.
 
+## WebSocket messaging
+
+The API exposes an authenticated native WebSocket endpoint at `GET /ws/conversations/{conversationId}`. The browser's Identity cookie authenticates the handshake, and the endpoint also checks the request origin against `Cors:JsClientOrigins` before accepting it. A connected user must be the listing owner or conversation participant.
+
+The wire protocol is deliberately small:
+
+- Client to server: `{ "type": "message", "body": "..." }`.
+- Server to clients: `{ "type": "message", "message": { "senderId": "...", "senderDisplayName": "...", "body": "...", "sentAt": "..." } }`.
+- Validation or protocol failures: `{ "type": "error", "error": "..." }`.
+
+The Web API's in-memory `ConversationWebSocketManager` tracks connections by conversation. Each incoming message gets a fresh DI scope, is authorized and persisted through `IConversationService`, and is broadcast only after `SaveChangesAsync` succeeds. The long-lived socket therefore never holds a scoped `AppDbContext`. The Vue conversation thread uses the socket for replies and live delivery; its initial load and reconnect recovery still use `GET /api/conversations/{id}`. The existing HTTP reply endpoint remains available for clients that have not yet migrated.
+
 ## Gotchas
 
 **`POST /api/conversations/{id}/replies` can return messages out of chronological order in its own response.** `ConversationsController.Reply` calls `PostReplyAsync` (which adds the new `Message` via `db.Messages.Add(...)` and saves) and then `GetThreadAsync` (which re-queries the same conversation with `.Include(c => c.Messages.OrderBy(m => m.SentAt))`) — both against the same scoped `DbContext` within one request. Because the `Conversation`/new `Message` are already tracked from the first call, EF Core's change-tracker fixup can leave the just-added message in its fixup-assigned position within the `Messages` collection rather than the position the `OrderBy(SentAt)` subquery would place it in, so the POST response's message list can render the new message out of order. A plain `GET /api/conversations/{id}` immediately after (a fresh `DbContext`) always returns the correct chronological order — confirmed while browser-testing `AgoraFold.React`'s reply flow. Not something a single JS client can fix; if it matters, it needs fixing backend-side (e.g. re-sort `conversation.Messages` by `SentAt` before mapping to `ConversationThreadResponse` in `Reply`), which would fix it for every JS frontend at once.

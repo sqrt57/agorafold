@@ -2,6 +2,7 @@ using AgoraFold.Core;
 using AgoraFold.Core.Entities;
 using AgoraFold.Core.Storage;
 using AgoraFold.WebApi.Filters;
+using AgoraFold.WebApi.Messaging;
 using AgoraFold.WebApi.Options;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
@@ -33,6 +34,7 @@ builder.Services.ConfigureApplicationCookie(options =>
 });
 
 builder.Services.AddAgoraFoldCore();
+builder.Services.AddSingleton<ConversationWebSocketManager>();
 builder.Services.Configure<ListingImageStorageOptions>(o =>
     o.RootPath = Path.Combine(builder.Environment.WebRootPath, "uploads", "listings"));
 
@@ -67,6 +69,7 @@ else
 }
 
 app.UseHttpsRedirection();
+app.UseWebSockets();
 app.UseStaticFiles(); // serves wwwroot/uploads/listings, populated at runtime
 app.UseRouting();
 
@@ -75,6 +78,8 @@ app.UseCors("JsClients");
 app.UseAuthentication();
 app.UseAuthorization();
 
+app.MapGet("/ws/conversations/{conversationId:int}", ConversationWebSocketEndpoint.HandleAsync)
+    .RequireAuthorization();
 app.MapControllers();
 
 app.Run();

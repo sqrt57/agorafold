@@ -34,6 +34,12 @@ export function imageUrl(path: string | null | undefined): string | undefined {
   return path ? `${API_BASE_URL}${path}` : undefined
 }
 
+export function webSocketUrl(path: string): string {
+  const url = new URL(`${API_BASE_URL}${path}`)
+  url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:'
+  return url.toString()
+}
+
 interface ApiFetchOptions {
   method?: string
   body?: unknown
