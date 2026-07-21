@@ -3,6 +3,7 @@
 @inject UserManager<AppUser> UserManager
 @inject SignInManager<AppUser> SignInManager
 @inject IdentityRedirectManager RedirectManager
+@inject CurrentUserAccessor CurrentUser
 
 <PageTitle>Register</PageTitle>
 
@@ -40,6 +41,14 @@
     private InputModel Input { get; set; } = new();
 
     private string[] _errors = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (await CurrentUser.GetUserIdAsync() is not null)
+        {
+            RedirectManager.RedirectTo("/");
+        }
+    }
 
     private async Task RegisterUser()
     {
