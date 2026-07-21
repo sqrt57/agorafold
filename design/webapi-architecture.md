@@ -52,7 +52,9 @@ Cookie-based `AddIdentity`, but `ConfigureApplicationCookie`'s `OnRedirectToLogi
 
 ## CORS
 
-`AddCors`/`UseCors` (registered before `UseAuthentication`) allows a configurable list of JS client dev origins (`Cors:JsClientOrigins` in `appsettings.json`, currently Vue's `5173`, React's `5174`, Svelte's `5175`, and Angular's `5176`) with `AllowCredentials()`. Each new JS variant needs its own dev origin added to that array.
+`AddCors`/`UseCors` (registered before `UseAuthentication`) allows a configurable list of JS client dev origins (`Cors:JsClientOrigins` in `appsettings.json`, currently Vue's `5173`, React's `5174`, Svelte's `5175`, Angular's `5176`, and SolidJS's `5177`) with `AllowCredentials()`. Each new JS variant needs its own dev origin added to that array.
+
+The policy (`Options/ConfigureCorsOptions.cs`, an `IConfigureOptions<CorsOptions>` that takes a DI-injected `IOptionsMonitor<JsClientCorsOptions>`) checks each request's origin against `JsClientCorsOptions.CurrentValue.JsClientOrigins` via `SetIsOriginAllowed` rather than baking a fixed array into the policy with `WithOrigins` at startup. Because `IOptionsMonitor` re-reads `appsettings.json` on file change, editing `Cors:JsClientOrigins` takes effect on the next request — no need to restart the running `dotnet run` process to add a new client's dev origin.
 
 ## CSRF
 

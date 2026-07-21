@@ -2,6 +2,7 @@ using AgoraFold.Core;
 using AgoraFold.Core.Entities;
 using AgoraFold.Core.Storage;
 using AgoraFold.WebApi.Filters;
+using AgoraFold.WebApi.Options;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 
@@ -46,12 +47,11 @@ if (jsClientOrigins is not { Length: > 0 })
     throw new InvalidOperationException("Cors:JsClientOrigins is not configured.");
 }
 
-builder.Services.AddCors(options =>
-    options.AddPolicy("JsClients", policy => policy
-        .WithOrigins(jsClientOrigins)
-        .AllowAnyHeader()
-        .AllowAnyMethod()
-        .AllowCredentials()));
+// Bound via IOptionsMonitor (see ConfigureCorsOptions) rather than a fixed array, so editing
+// Cors:JsClientOrigins in appsettings.json takes effect on the next request without restarting.
+builder.Services.Configure<JsClientCorsOptions>(builder.Configuration.GetSection("Cors"));
+builder.Services.ConfigureOptions<ConfigureCorsOptions>();
+builder.Services.AddCors();
 
 builder.Services.AddOpenApi();
 
