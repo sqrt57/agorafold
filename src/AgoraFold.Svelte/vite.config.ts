@@ -6,9 +6,5 @@ export default defineConfig({
   server: {
     port: 5175,
     strictPort: true,
-    proxy: {
-      '/api': 'http://localhost:5155',
-      '/uploads': 'http://localhost:5155',
-    },
   },
 })

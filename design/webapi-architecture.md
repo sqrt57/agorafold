@@ -35,7 +35,7 @@ No separate spec doc exists for this variant — it predates the current per-var
 - It ports the same `src/api/*.ts` contract as an injectable `ApiClient` service (`src/app/api/client.ts`) plus per-feature services (`AccountApi`, `CategoriesApi`, `ListingsApi`, `ConversationsApi`), and the same global CSS unmodified as `src/styles.css`.
 - Auth/hydration state lives in an injectable `AuthService` (`src/app/auth/auth.service.ts`) using signals for `user`/`hydrated`, with the same memoized-hydrate-promise pattern the other clients use to dedupe the initial `/api/account/me` call.
 - Unlike the other three clients' hand-rolled routers, `AgoraFold.Angular` uses the real Angular Router (`src/app/app.routes.ts`) — protected routes carry a functional `authGuard: CanActivateFn` that awaits `AuthService.hydrate()` before deciding, redirecting to `/login?returnUrl=...` on failure, same as the others' behavior.
-- Its dev server runs at `http://localhost:5176` (`ng serve`, configured for this fixed port in `angular.json`); a `proxy.conf.json` forwards `/api` and `/uploads` to `AgoraFold.WebApi` at `http://localhost:5155`, and `environment.apiBaseUrl` (empty string in dev, same pattern as the other clients' `VITE_API_BASE_URL`) is prefixed onto image URLs by the ported `imageUrl()` helper.
+- Its dev server runs at `http://localhost:5176` (`ng serve`, configured for this fixed port in `angular.json`); like the other three clients it calls `AgoraFold.WebApi` directly cross-origin rather than through a dev-server proxy, via `environment.apiBaseUrl` (`http://localhost:5155` in dev, same pattern as the other clients' `VITE_API_BASE_URL`) prefixed onto image URLs by the ported `imageUrl()` helper.
 
 ## Auth
 
