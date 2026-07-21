@@ -51,7 +51,7 @@ app.UseStaticFiles();
 // Explicit, and placed after UseStaticFiles: without it, ASP.NET Core auto-inserts routing at
 // the very front of the pipeline, so endpoint matching (including MapStaticAssets' build-time-
 // manifest check) would run before UseStaticFiles gets a chance - breaking the runtime-written
-// wwwroot/uploads/listings files the same "uploads aren't build-time assets" way CLAUDE.md
+// wwwroot/uploads/listings files the same "uploads aren't build-time assets" way AGENTS.md
 // documents for the other variants, just via a different mechanism (routing order, not the
 // manifest check itself).
 app.UseRouting();
