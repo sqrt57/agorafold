@@ -1,24 +1,12 @@
-# Blazor Server Variant Spec
+# AgoraFold.BlazorServer Architecture
 
 ## Summary
 
-Fifth front-end variant: `AgoraFold.BlazorServer`, built on the .NET 8+ "Blazor Web App" template shape (Interactive Server render mode over a persistent SignalR circuit, not the legacy pre-.NET-8 "Blazor Server" template). Domain, feature scope, and data model are already fully specified in `project-spec.md` — this doc only covers what's different: the render-mode/circuit split, DI-lifetime trade-off, and the mechanisms that replace what MVC got from its request/response pipeline for free.
-
-## Goals
-
-- Same full feature set as every other variant: accounts, listings with images, browse/search, buyer-seller messaging — parity with `AgoraFold.Mvc`, not beyond it.
-- Demonstrate component-based, stateful server rendering: UI updates flow over a live connection instead of full page POST/redirect/GET cycles.
-- Reuse `AgoraFold.Core` as-is, same as every other variant.
-
-## Non-goals
-
-- Blazor WebAssembly — a separate future variant, not part of this one.
-- Live/pushed message delivery — a circuit could trivially support it, but doing so would exceed MVC's reference feature set. Punted as a stretch goal (see Messaging below).
-- Re-specifying the domain model or feature list — see `project-spec.md`.
+`AgoraFold.BlazorServer`, built on the .NET 8+ "Blazor Web App" template shape (Interactive Server render mode over a persistent SignalR circuit, not the legacy pre-.NET-8 "Blazor Server" template). Goals, non-goals, and open questions for this variant live in `design/project-spec.md`; this doc covers the render-mode/circuit split, the DI-lifetime trade-off, and the mechanisms that replace what MVC got from its request/response pipeline for free. Ports: `http://localhost:5159`, `https://localhost:7135`.
 
 ## Architecture
 
-- Project shape: own `wwwroot`/uploads, own ports (`5159`/`7135`, next in the existing sequence). `Program.cs` copies the `AddDbContext`/`AddIdentity`/`AddAgoraFoldCore`/`Configure<ListingImageStorageOptions>` block verbatim from `AgoraFold.Htmx` — Core's DI contract is render-model-agnostic.
+- Project shape: own `wwwroot`/uploads, own ports. `Program.cs` copies the `AddDbContext`/`AddIdentity`/`AddAgoraFoldCore`/`Configure<ListingImageStorageOptions>` block verbatim from `AgoraFold.Htmx` — Core's DI contract is render-model-agnostic.
 - **DI lifetime**: Core's services (and `AppDbContext`) stay `Scoped`, unchanged. In Blazor Server, `Scoped` = per-circuit (one browser tab's SignalR connection), not per-HTTP-request — a long-open tab holds one `AppDbContext` instance for its whole session. This is a deliberate trade-off, not an oversight: a circuit's renderer already serializes event handling (no concurrent access to that instance from app code), and each tab is its own circuit with its own scope, so there's no cross-user contention. `IDbContextFactory<AppDbContext>` was considered and rejected — it would require wrapping every Core service to accept a factory instead of a constructor-injected context, real complexity for a portfolio piece whose point is idiomatic-per-variant code, not defensive engineering against a load profile this app doesn't have.
 - **Render-mode split**: most pages carry `@rendermode InteractiveServer`. Login/Register (`Components/Account/Pages/`) stay static SSR (no `@rendermode`) because signing in/out writes a `Set-Cookie` header, which needs a real HTTP response — unavailable once a component is running inside a persistent circuit. Logout is a plain minimal API endpoint (`POST /Account/Logout`, `Components/Account/IdentityComponentsEndpointRouteBuilderExtensions.cs`) for the same reason, not a routable component.
 - **Auth state**: components read identity via a cascaded `AuthenticationState` (`AddCascadingAuthenticationState()` + `IdentityRevalidatingAuthenticationStateProvider`, which periodically re-checks the security stamp so a long-open circuit notices e.g. a password change elsewhere), not `HttpContext.User` directly. A small `CurrentUserAccessor` scoped service wraps the async lookup, mirroring Mvc's synchronous `CurrentUserId` controller property.
@@ -43,6 +31,13 @@ No extra mechanism for interactive circuits: a Blazor Server circuit is a single
 
 Reply-triggers-local-refresh only: posting a reply re-fetches the thread and lets normal re-rendering show the new message, no polling, no SignalR-native push. A circuit's live connection could trivially support pushed updates, but that would exceed Mvc's reference feature set and require inventing signaling plumbing Core doesn't have — explicitly a stretch goal, not a v1 deliverable.
 
-## Open questions
+## Gotchas
 
-- Whether pagination/filter state on Browse should sync to the URL via `NavigationManager.NavigateTo` (implemented) is worth keeping long-term vs. simplifying to component-local state only — not a blocker, current behavior gives shareable/bookmarkable browse links same as Mvc's query-string approach.
+Five non-obvious issues found while building this variant, each only caught by running the app in-browser rather than by the compiler:
+
+1. Component attributes bound to `string`-typed parameters need an explicit `@` prefix to be treated as a C# expression — `Title="listing.Title"` silently renders the literal text `listing.Title`, not the property value.
+2. `@(x).Method()` only wraps the parenthesized part in the C# expression, so a trailing method chain after the closing paren renders as literal text.
+3. `App.razor` needs an explicit `<base href="/" />` or relative asset paths 404 on any route deeper than `/`.
+4. `app.UseRouting()` must be explicit and placed after `app.UseStaticFiles()` — otherwise ASP.NET Core auto-inserts routing at the very front of the pipeline, so endpoint matching runs before `UseStaticFiles()` can serve the runtime-written files under `wwwroot/uploads/listings/`.
+5. A reusable child component must not independently query a Scoped-DbContext-backed service if it can render concurrently with a parent's own in-flight query — `Components/Shared/CategorySelect.razor` takes categories as a `[Parameter]` instead of self-fetching, for exactly this reason.
+6. `TypedResults.LocalRedirect($"~/{returnUrl}")` produces `"~//"` when `returnUrl` is `"/"`, which ASP.NET's local-URL check rejects (it looks like a protocol-relative URL, the same class of string a real open-redirect defense should reject) — throws `InvalidOperationException: The supplied URL is not local`. Fix: pass `returnUrl` straight through without the `~/` prefix when it's already a proper local path.

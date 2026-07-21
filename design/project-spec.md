@@ -9,12 +9,16 @@ A classifieds board app: users post listings under categories, browse/search/fil
 - A working classifieds board on MVC: accounts, listings with images, search/filter, and buyer-seller messaging.
 - A domain model (`AgoraFold.Core`) reusable as-is by every future front-end variant — no MVC-specific concerns leak into it.
 - This is a learning exercise (possible portfolio piece), not a production app — no deadline. Each variant gets the full feature set (accounts/images/messaging), not just CRUD, before moving to the next. Planned order: MVC → Razor Pages → Web API + Vue → HTMX → Blazor Server → Blazor WebAssembly → Web API + React → Web API + Svelte → Web API + Angular → Web API + SolidJS.
+- HTMX variant: demonstrate hypermedia-driven UI — server returns HTML fragments, HTMX swaps them in, no client-side framework, minimal hand-written JS.
+- Blazor Server variant: demonstrate component-based, stateful server rendering — UI updates flow over a live SignalR connection instead of full page POST/redirect/GET cycles.
 
 ## Non-goals
 
 - Payments/transactions, escrow, or any money handling.
 - Admin/moderation tooling.
 - Other front-end variants — tracked in the README, specced separately later.
+- HTMX variant: WebSockets/SSE for live messaging (polling is enough to demonstrate the pattern for v1); a JS framework or build step (HTMX is vendored as a static file like Bootstrap/jQuery, no Vite/npm bundling).
+- Blazor Server variant: Blazor WebAssembly (a separate future variant); live/pushed message delivery (a circuit could trivially support it, but doing so would exceed the MVC reference feature set — punted as a stretch goal).
 
 ## Domain model
 
@@ -75,4 +79,5 @@ erDiagram
 
 ## Open questions
 
-None.
+- HTMX variant: polling interval for the message thread (proposed 5s) — may need tuning once it's actually running, not a blocker to start building. Whether `hx-boost` gets applied globally (boosting all normal links/forms into AJAX navigations) or left off in favor of only using HTMX explicitly where a partial genuinely helps — leaning toward leaving it off, since the point of this variant is showing deliberate partial updates, not turning the whole app into a pseudo-SPA.
+- Blazor Server variant: whether pagination/filter state on Browse should keep syncing to the URL via `NavigationManager.NavigateTo` (implemented) long-term vs. simplifying to component-local state only — not a blocker, current behavior gives shareable/bookmarkable browse links same as Mvc's query-string approach.
