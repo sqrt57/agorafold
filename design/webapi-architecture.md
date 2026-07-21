@@ -2,7 +2,7 @@
 
 ## Summary
 
-The JSON API backend for the "Web API + JS frontend" family of variants. Currently consumed by `AgoraFold.Vue` (Vite/Vue 3 + TypeScript SPA) and `AgoraFold.React` (Vite/React + TypeScript SPA, a feature-parity port of Vue); the planned Svelte and Angular/SolidJS variants will consume this same API rather than getting their own backend, so the auth/CORS/CSRF design below applies to all of them. Ports: `http://localhost:5155`, `https://localhost:7131` (Vue dev server: `http://localhost:5173`, React dev server: `http://localhost:5174`).
+The JSON API backend for the "Web API + JS frontend" family of variants. Consumed by `AgoraFold.Vue` (Vite/Vue 3 + TypeScript SPA), `AgoraFold.React` (Vite/React + TypeScript SPA), and `AgoraFold.Svelte` (Vite/Svelte + TypeScript SPA); the planned Angular and SolidJS variants will consume this same API rather than getting their own backend, so the auth/CORS/CSRF design below applies to all of them. Ports: `http://localhost:5155`, `https://localhost:7131` (Vue dev server: `http://localhost:5173`, React dev server: `http://localhost:5174`, Svelte dev server: `http://localhost:5175`).
 
 No separate spec doc exists for this variant — it predates the current per-variant `-spec.md` convention. This document is the architecture reference; new JS frontend variants should link back here rather than re-documenting the backend.
 
@@ -23,13 +23,19 @@ No separate spec doc exists for this variant — it predates the current per-var
 - `vue-router`'s per-route `meta.requiresAuth` + `beforeEach` guard becomes a `<RequireAuth>` wrapper component (`src/components/RequireAuth.tsx`) used per-route in `App.tsx`'s `<Routes>`.
 - The single global `src/style.css` is reused unmodified as `src/index.css` (plain CSS, no Vue-specific scoping to strip).
 
+## Svelte client specifics
+
+- `AgoraFold.Svelte` is a frontend-only Vite project, like Vue and React, and is not added to `AgoraFold.slnx`.
+- It ports the same `src/api/*.ts` contract and global CSS, using Svelte stores for authentication and a small history-based router so the feature URLs remain identical across the JS clients.
+- Its dev server runs at `http://localhost:5175`; the API origin is configured through `VITE_API_BASE_URL` in `.env`.
+
 ## Auth
 
 Cookie-based `AddIdentity`, but `ConfigureApplicationCookie`'s `OnRedirectToLogin`/`OnRedirectToAccessDenied` events are overridden to return raw 401/403 instead of Identity's default 302-to-a-login-page — without this, every `[Authorize]` failure would come back as a redirect the SPA can't sensibly follow.
 
 ## CORS
 
-`AddCors`/`UseCors` (registered before `UseAuthentication`) allows a configurable list of JS client dev origins (`Cors:JsClientOrigins` in `appsettings.json`, currently Vue's `5173` and React's `5174`) with `AllowCredentials()`. Each new JS variant needs its own dev origin added to that array.
+`AddCors`/`UseCors` (registered before `UseAuthentication`) allows a configurable list of JS client dev origins (`Cors:JsClientOrigins` in `appsettings.json`, currently Vue's `5173`, React's `5174`, and Svelte's `5175`) with `AllowCredentials()`. Each new JS variant needs its own dev origin added to that array.
 
 ## CSRF
 
@@ -37,7 +43,7 @@ Parity with Mvc/RazorPages's `[ValidateAntiForgeryToken]` uses a custom `Filters
 
 A `GET /api/antiforgery/token` endpoint (`AntiforgeryController`) hands the client a token to echo back as `X-CSRF-TOKEN`.
 
-**Non-obvious gotcha**: ASP.NET's antiforgery token is bound to whichever identity (anonymous or a specific user) was active when it was issued, so both the Vue and React clients' `src/api/client.ts` fetch a fresh token before every mutating request rather than caching one — a token cached from before login/register/logout gets rejected on the next mutating call once the identity changes. Any future JS frontend consuming this API needs the same fetch-fresh-token-per-mutation pattern.
+**Non-obvious gotcha**: ASP.NET's antiforgery token is bound to whichever identity (anonymous or a specific user) was active when it was issued, so the Vue, React, and Svelte clients' `src/api/client.ts` fetch a fresh token before every mutating request rather than caching one — a token cached from before login/register/logout gets rejected on the next mutating call once the identity changes. Any future JS frontend consuming this API needs the same fetch-fresh-token-per-mutation pattern.
 
 ## Gotchas
 
