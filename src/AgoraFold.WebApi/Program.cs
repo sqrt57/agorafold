@@ -40,12 +40,15 @@ builder.Services.AddControllers(options =>
 
 builder.Services.AddAntiforgery(options => options.HeaderName = "X-CSRF-TOKEN");
 
-var vueClientOrigin = builder.Configuration["Cors:VueClientOrigin"]
-    ?? throw new InvalidOperationException("Cors:VueClientOrigin is not configured.");
+var jsClientOrigins = builder.Configuration.GetSection("Cors:JsClientOrigins").Get<string[]>();
+if (jsClientOrigins is not { Length: > 0 })
+{
+    throw new InvalidOperationException("Cors:JsClientOrigins is not configured.");
+}
 
 builder.Services.AddCors(options =>
-    options.AddPolicy("VueClient", policy => policy
-        .WithOrigins(vueClientOrigin)
+    options.AddPolicy("JsClients", policy => policy
+        .WithOrigins(jsClientOrigins)
         .AllowAnyHeader()
         .AllowAnyMethod()
         .AllowCredentials()));
@@ -67,7 +70,7 @@ app.UseHttpsRedirection();
 app.UseStaticFiles(); // serves wwwroot/uploads/listings, populated at runtime
 app.UseRouting();
 
-app.UseCors("VueClient");
+app.UseCors("JsClients");
 
 app.UseAuthentication();
 app.UseAuthorization();
