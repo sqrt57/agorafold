@@ -1,0 +1,41 @@
+@page "/Listings/Mine"
+@attribute [Authorize]
+@rendermode InteractiveServer
+@inject IListingService ListingService
+@inject CurrentUserAccessor CurrentUser
+
+<PageTitle>My Listings</PageTitle>
+
+<h1>My Listings</h1>
+
+@if (_listings is null)
+{
+    <p>Loading...</p>
+}
+else if (_listings.Count == 0)
+{
+    <p>You haven't posted any listings yet. <a href="/Listings/Create">Post one</a>.</p>
+}
+else
+{
+    <div class="row row-cols-1 row-cols-md-3 g-3">
+        @foreach (var listing in _listings)
+        {
+            <ListingCard Id="listing.Id" Title="@listing.Title" Price="listing.Price"
+                         CategoryName="@listing.Category.Name" ThumbnailUrl="@Thumbnail(listing)" />
+        }
+    </div>
+}
+
+@code {
+    private IReadOnlyList<Listing>? _listings;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var userId = (await CurrentUser.GetUserIdAsync())!;
+        _listings = await ListingService.GetMyListingsAsync(userId);
+    }
+
+    private static string? Thumbnail(Listing listing) =>
+        listing.Images.Count > 0 ? $"/uploads/listings/{listing.Images.First().Path}" : null;
+}

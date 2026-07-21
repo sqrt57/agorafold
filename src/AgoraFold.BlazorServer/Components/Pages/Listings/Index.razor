@@ -1,0 +1,104 @@
+@page "/"
+@rendermode InteractiveServer
+@inject IListingService ListingService
+@inject ICategoryService CategoryService
+@inject NavigationManager Navigation
+
+<PageTitle>Browse Listings</PageTitle>
+
+<h1>Browse Listings</h1>
+
+<div class="row mb-3 g-2">
+    <div class="col-md-4">
+        <CategorySelect Categories="_categories" SelectedCategoryId="CategoryId" SelectedCategoryIdChanged="OnCategoryChanged" IncludeAnyOption="true" />
+    </div>
+    <div class="col-md-6">
+        <input type="search" class="form-control" placeholder="Search title or description"
+               value="@SearchTerm" @oninput="OnSearchChanged" />
+    </div>
+</div>
+
+@if (_result is null)
+{
+    <p>Loading...</p>
+}
+else if (_result.Items.Count == 0)
+{
+    <p>No listings found.</p>
+}
+else
+{
+    <div class="row row-cols-1 row-cols-md-3 g-3">
+        @foreach (var listing in _result.Items)
+        {
+            <ListingCard Id="listing.Id" Title="@listing.Title" Price="listing.Price"
+                         CategoryName="@listing.Category.Name" ThumbnailUrl="@Thumbnail(listing)" />
+        }
+    </div>
+
+    <nav class="mt-3">
+        <ul class="pagination">
+            <li class="page-item @(_result.HasPreviousPage ? "" : "disabled")">
+                <button class="page-link" @onclick="() => GoToPage(_result.Page - 1)">Previous</button>
+            </li>
+            <li class="page-item disabled"><span class="page-link">Page @_result.Page of @Math.Max(_result.TotalPages, 1)</span></li>
+            <li class="page-item @(_result.HasNextPage ? "" : "disabled")">
+                <button class="page-link" @onclick="() => GoToPage(_result.Page + 1)">Next</button>
+            </li>
+        </ul>
+    </nav>
+}
+
+@code {
+    private const int PageSize = 12;
+
+    [SupplyParameterFromQuery(Name = "categoryId")]
+    public int? CategoryId { get; set; }
+
+    [SupplyParameterFromQuery(Name = "q")]
+    public string? SearchTerm { get; set; }
+
+    [SupplyParameterFromQuery(Name = "page")]
+    public int? Page { get; set; }
+
+    private PagedResult<Listing>? _result;
+    private IReadOnlyList<Category> _categories = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        _categories = await CategoryService.GetAllAsync();
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _result = await ListingService.BrowseAsync(CategoryId, SearchTerm, Page is > 0 ? Page.Value : 1, PageSize);
+    }
+
+    private void ApplyFilters(int? categoryId, string? searchTerm, int page)
+    {
+        var query = new Dictionary<string, object?>
+        {
+            ["categoryId"] = categoryId,
+            ["q"] = string.IsNullOrWhiteSpace(searchTerm) ? null : searchTerm,
+            ["page"] = page == 1 ? null : page,
+        };
+        Navigation.NavigateTo(Navigation.GetUriWithQueryParameters(query));
+    }
+
+    private void OnCategoryChanged(int? categoryId) => ApplyFilters(categoryId, SearchTerm, 1);
+
+    private void OnSearchChanged(ChangeEventArgs e) => ApplyFilters(CategoryId, e.Value?.ToString(), 1);
+
+    private void GoToPage(int page)
+    {
+        if (page < 1)
+        {
+            return;
+        }
+
+        ApplyFilters(CategoryId, SearchTerm, page);
+    }
+
+    private static string? Thumbnail(Listing listing) =>
+        listing.Images.Count > 0 ? $"/uploads/listings/{listing.Images.First().Path}" : null;
+}

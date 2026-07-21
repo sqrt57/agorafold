@@ -1,0 +1,54 @@
+@page "/Conversations"
+@attribute [Authorize]
+@rendermode InteractiveServer
+@inject IConversationService ConversationService
+@inject CurrentUserAccessor CurrentUser
+
+<PageTitle>Inbox</PageTitle>
+
+<h1>Inbox</h1>
+
+@if (_conversations is null)
+{
+    <p>Loading...</p>
+}
+else if (_conversations.Count == 0)
+{
+    <p>No conversations yet.</p>
+}
+else
+{
+    <div class="list-group">
+        @foreach (var conversation in _conversations)
+        {
+            var lastMessage = conversation.Messages.FirstOrDefault();
+            <a class="list-group-item list-group-item-action" href="/Conversations/@conversation.Id">
+                <div class="d-flex justify-content-between">
+                    <strong>@conversation.Listing.Title</strong>
+                    <small class="text-muted">@((lastMessage?.SentAt ?? conversation.StartedAt).ToLocalTime().ToString("g"))</small>
+                </div>
+                <div>@OtherParty(conversation)</div>
+                @if (lastMessage is not null)
+                {
+                    <div class="text-muted text-truncate">@(lastMessage.SenderId == _userId ? "You: " : "")@lastMessage.Body</div>
+                }
+            </a>
+        }
+    </div>
+}
+
+@code {
+    private IReadOnlyList<Conversation>? _conversations;
+    private string _userId = "";
+
+    protected override async Task OnInitializedAsync()
+    {
+        _userId = (await CurrentUser.GetUserIdAsync())!;
+        _conversations = await ConversationService.GetInboxAsync(_userId);
+    }
+
+    private string OtherParty(Conversation conversation) =>
+        conversation.Listing.OwnerId == _userId
+            ? conversation.Participant.DisplayName
+            : conversation.Listing.Owner.DisplayName;
+}

@@ -1,0 +1,27 @@
+@if (Error is not null)
+{
+    <div class="alert @AlertClass">@Message</div>
+}
+
+@code {
+    // A plain presentational component rather than an <ErrorBoundary>: ErrorBoundary only catches
+    // exceptions thrown by its *descendants* during rendering, not exceptions thrown by the page's
+    // own OnParametersSetAsync that hosts it - which is exactly where GetDetailAsync/ownership
+    // checks throw here. Pages catch the exception themselves and hand it to this component to render.
+    [Parameter]
+    public Exception? Error { get; set; }
+
+    private string AlertClass => Error switch
+    {
+        NotFoundException => "alert-warning",
+        ForbiddenException => "alert-danger",
+        _ => "alert-danger",
+    };
+
+    private string Message => Error switch
+    {
+        NotFoundException => "That item doesn't exist or was removed.",
+        ForbiddenException => "You don't have permission to do that.",
+        _ => "Something went wrong. Please try again.",
+    };
+}

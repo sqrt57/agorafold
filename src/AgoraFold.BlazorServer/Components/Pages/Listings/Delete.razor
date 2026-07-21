@@ -1,0 +1,62 @@
+@page "/Listings/Delete/{Id:int}"
+@attribute [Authorize]
+@rendermode InteractiveServer
+@inject IListingService ListingService
+@inject CurrentUserAccessor CurrentUser
+@inject NavigationManager Navigation
+
+<DomainErrorAlert Error="_error" />
+
+@if (_listing is not null)
+{
+    <h1>Delete Listing</h1>
+    <p>Are you sure you want to delete <strong>@_listing.Title</strong>? This cannot be undone.</p>
+    @if (_thumbnailUrl is not null)
+    {
+        <img src="@_thumbnailUrl" alt="@_listing.Title" class="img-thumbnail mb-3" style="max-width: 200px;" />
+    }
+    <div>
+        <button class="btn btn-danger" @onclick="ConfirmAsync">Delete</button>
+        <a class="btn btn-secondary" href="/Listings/@_listing.Id">Cancel</a>
+    </div>
+}
+
+@code {
+    [Parameter]
+    public int Id { get; set; }
+
+    private Exception? _error;
+    private Listing? _listing;
+    private string? _thumbnailUrl;
+    private string _ownerId = "";
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _error = null;
+        _listing = null;
+
+        try
+        {
+            _listing = await ListingService.GetDetailAsync(Id);
+
+            _ownerId = (await CurrentUser.GetUserIdAsync())!;
+            if (_listing.OwnerId != _ownerId)
+            {
+                throw new ForbiddenException("You do not own this listing.");
+            }
+
+            _thumbnailUrl = _listing.Images.Count > 0 ? $"/uploads/listings/{_listing.Images.First().Path}" : null;
+        }
+        catch (Exception ex) when (ex is NotFoundException or ForbiddenException)
+        {
+            _error = ex;
+            _listing = null;
+        }
+    }
+
+    private async Task ConfirmAsync()
+    {
+        await ListingService.DeleteAsync(Id, _ownerId);
+        Navigation.NavigateTo("/Listings/Mine");
+    }
+}

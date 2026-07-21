@@ -1,0 +1,119 @@
+@page "/Listings/Create"
+@attribute [Authorize]
+@rendermode InteractiveServer
+@inject IListingService ListingService
+@inject IListingImageService ListingImageService
+@inject ICategoryService CategoryService
+@inject CurrentUserAccessor CurrentUser
+@inject NavigationManager Navigation
+
+<PageTitle>Post a Listing</PageTitle>
+
+<h1>Post a Listing</h1>
+
+<ErrorList Errors="_errors" />
+
+<EditForm Model="_input" OnValidSubmit="SubmitAsync">
+    <DataAnnotationsValidator />
+    <div class="mb-3">
+        <label class="form-label">Title</label>
+        <InputText class="form-control" @bind-Value="_input.Title" />
+        <ValidationMessage For="() => _input.Title" class="text-danger" />
+    </div>
+    <div class="mb-3">
+        <label class="form-label">Description</label>
+        <InputTextArea class="form-control" rows="5" @bind-Value="_input.Description" />
+        <ValidationMessage For="() => _input.Description" class="text-danger" />
+    </div>
+    <div class="mb-3">
+        <label class="form-label">Price</label>
+        <InputNumber class="form-control" @bind-Value="_input.Price" />
+        <ValidationMessage For="() => _input.Price" class="text-danger" />
+    </div>
+    <div class="mb-3">
+        <label class="form-label">Category</label>
+        <CategorySelect Categories="_categories" SelectedCategoryId="_input.CategoryId" SelectedCategoryIdChanged="id => _input.CategoryId = id ?? 0" />
+    </div>
+    <div class="mb-3">
+        <label class="form-label">Images (up to 8, 5 MB each)</label>
+        <InputFile OnChange="OnFilesSelected" multiple class="form-control" />
+    </div>
+    <button type="submit" class="btn btn-primary">Post Listing</button>
+</EditForm>
+
+@code {
+    private const long MaxFileSize = 5 * 1024 * 1024;
+
+    private readonly CreateInput _input = new();
+    private IReadOnlyList<IBrowserFile> _selectedFiles = [];
+    private IReadOnlyList<Category> _categories = [];
+    private string[] _errors = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        _categories = await CategoryService.GetAllAsync();
+    }
+
+    private void OnFilesSelected(InputFileChangeEventArgs e)
+    {
+        _selectedFiles = e.GetMultipleFiles(maximumFileCount: 8);
+    }
+
+    private async Task SubmitAsync()
+    {
+        var userId = (await CurrentUser.GetUserIdAsync())!;
+
+        Listing listing;
+        try
+        {
+            listing = await ListingService.CreateAsync(userId,
+                new ListingEditRequest(_input.Title, _input.Description, _input.Price, _input.CategoryId));
+        }
+        catch (ValidationException ex)
+        {
+            _errors = ex.Errors.ToArray();
+            return;
+        }
+
+        if (_selectedFiles.Count > 0)
+        {
+            var uploads = new List<ListingImageUpload>();
+            foreach (var file in _selectedFiles)
+            {
+                var stream = new MemoryStream();
+                await file.OpenReadStream(MaxFileSize).CopyToAsync(stream);
+                stream.Position = 0;
+                uploads.Add(new ListingImageUpload(stream, file.Name, stream.Length));
+            }
+
+            try
+            {
+                await ListingImageService.AddImagesAsync(listing.Id, userId, uploads);
+            }
+            catch (ValidationException)
+            {
+                // Listing itself was already created - land on Edit so the image upload can be retried
+                // without losing the listing, instead of silently dropping the images.
+                Navigation.NavigateTo($"/Listings/Edit/{listing.Id}");
+                return;
+            }
+        }
+
+        Navigation.NavigateTo($"/Listings/{listing.Id}");
+    }
+
+    private sealed class CreateInput
+    {
+        [Required, StringLength(200)]
+        public string Title { get; set; } = "";
+
+        [Required, StringLength(4000)]
+        public string Description { get; set; } = "";
+
+        [Range(0, 100_000_000)]
+        public decimal? Price { get; set; }
+
+        [Range(1, int.MaxValue, ErrorMessage = "Please choose a category.")]
+        public int CategoryId { get; set; }
+    }
+}

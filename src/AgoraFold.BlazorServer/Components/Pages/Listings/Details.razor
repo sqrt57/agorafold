@@ -1,0 +1,75 @@
+@page "/Listings/{Id:int}"
+@rendermode InteractiveServer
+@inject IListingService ListingService
+@inject IConversationService ConversationService
+@inject CurrentUserAccessor CurrentUser
+@inject NavigationManager Navigation
+
+<DomainErrorAlert Error="_error" />
+
+@if (_listing is not null)
+{
+    <h1>@_listing.Title</h1>
+    <p class="text-muted">@_listing.Category.Name &middot; Posted @_listing.CreatedAt.ToLocalTime().ToString("d")</p>
+    <p class="fs-4">@(_listing.Price is null ? "Free" : _listing.Price.Value.ToString("C"))</p>
+
+    @if (_listing.Images.Count > 0)
+    {
+        <div class="row row-cols-2 row-cols-md-4 g-2 mb-3">
+            @foreach (var image in _listing.Images)
+            {
+                <div class="col"><img src="/uploads/listings/@image.Path" class="img-fluid rounded" alt="@_listing.Title" /></div>
+            }
+        </div>
+    }
+
+    <p style="white-space: pre-wrap;">@_listing.Description</p>
+    <p class="text-muted">Seller: @_listing.Owner.DisplayName</p>
+
+    @if (_isOwner)
+    {
+        <a class="btn btn-outline-secondary" href="/Listings/Edit/@_listing.Id">Edit</a>
+        <a class="btn btn-outline-danger" href="/Listings/Delete/@_listing.Id">Delete</a>
+    }
+    else if (_canMessage)
+    {
+        <button class="btn btn-primary" @onclick="StartConversationAsync">Message Seller</button>
+    }
+}
+
+@code {
+    [Parameter]
+    public int Id { get; set; }
+
+    private Exception? _error;
+    private Listing? _listing;
+    private bool _isOwner;
+    private bool _canMessage;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _error = null;
+        _listing = null;
+
+        try
+        {
+            _listing = await ListingService.GetDetailAsync(Id);
+        }
+        catch (NotFoundException ex)
+        {
+            _error = ex;
+            return;
+        }
+
+        var userId = await CurrentUser.GetUserIdAsync();
+        _isOwner = userId is not null && _listing.OwnerId == userId;
+        _canMessage = userId is not null && !_isOwner;
+    }
+
+    private async Task StartConversationAsync()
+    {
+        var userId = (await CurrentUser.GetUserIdAsync())!;
+        var conversation = await ConversationService.StartConversationAsync(Id, userId);
+        Navigation.NavigateTo($"/Conversations/{conversation.Id}");
+    }
+}

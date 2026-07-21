@@ -1,0 +1,88 @@
+@page "/Conversations/{Id:int}"
+@attribute [Authorize]
+@rendermode InteractiveServer
+@inject IConversationService ConversationService
+@inject CurrentUserAccessor CurrentUser
+
+<DomainErrorAlert Error="_error" />
+
+@if (_conversation is not null)
+{
+    <h1>@_conversation.Listing.Title</h1>
+    <p class="text-muted">Conversation with @OtherParty()</p>
+
+    <div class="mb-3">
+        @foreach (var message in _conversation.Messages)
+        {
+            <div class="mb-2 d-flex @(message.SenderId == _userId ? "justify-content-end" : "justify-content-start")">
+                <div class="p-2 rounded @(message.SenderId == _userId ? "bg-primary text-white" : "bg-light")" style="max-width: 70%;">
+                    <div>@message.Body</div>
+                    <small class="@(message.SenderId == _userId ? "text-white-50" : "text-muted")">@message.SentAt.ToLocalTime().ToString("g")</small>
+                </div>
+            </div>
+        }
+    </div>
+
+    <ErrorList Errors="_errors" />
+
+    <EditForm Model="_input" OnValidSubmit="ReplyAsync">
+        <DataAnnotationsValidator />
+        <div class="mb-3">
+            <InputTextArea class="form-control" rows="3" @bind-Value="_input.Body" placeholder="Write a reply..." />
+            <ValidationMessage For="() => _input.Body" class="text-danger" />
+        </div>
+        <button type="submit" class="btn btn-primary">Reply</button>
+    </EditForm>
+}
+
+@code {
+    [Parameter]
+    public int Id { get; set; }
+
+    private Exception? _error;
+    private Conversation? _conversation;
+    private string _userId = "";
+    private readonly ReplyInput _input = new();
+    private string[] _errors = [];
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _error = null;
+        _conversation = null;
+
+        try
+        {
+            _userId = (await CurrentUser.GetUserIdAsync())!;
+            _conversation = await ConversationService.GetThreadAsync(Id, _userId);
+        }
+        catch (Exception ex) when (ex is NotFoundException or ForbiddenException)
+        {
+            _error = ex;
+        }
+    }
+
+    private string OtherParty() =>
+        _conversation!.Listing.OwnerId == _userId
+            ? _conversation.Participant.DisplayName
+            : _conversation.Listing.Owner.DisplayName;
+
+    private async Task ReplyAsync()
+    {
+        try
+        {
+            await ConversationService.PostReplyAsync(Id, _userId, _input.Body);
+            _input.Body = "";
+            _conversation = await ConversationService.GetThreadAsync(Id, _userId);
+        }
+        catch (ValidationException ex)
+        {
+            _errors = ex.Errors.ToArray();
+        }
+    }
+
+    private sealed class ReplyInput
+    {
+        [Required, StringLength(4000)]
+        public string Body { get; set; } = "";
+    }
+}
