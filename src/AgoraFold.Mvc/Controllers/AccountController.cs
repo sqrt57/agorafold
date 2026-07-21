@@ -14,7 +14,7 @@ public class AccountController(UserManager<AppUser> userManager, SignInManager<A
     {
         if (User.Identity?.IsAuthenticated == true)
         {
-            return RedirectToAction("Index", "Home");
+            return RedirectToAction("Index", "Listings");
         }
 
         return View(new RegisterViewModel());
@@ -42,7 +42,7 @@ public class AccountController(UserManager<AppUser> userManager, SignInManager<A
         if (result.Succeeded)
         {
             await signInManager.SignInAsync(user, isPersistent: false);
-            return RedirectToAction("Index", "Home");
+            return RedirectToAction("Index", "Listings");
         }
 
         foreach (var error in result.Errors)
@@ -82,7 +82,7 @@ public class AccountController(UserManager<AppUser> userManager, SignInManager<A
                 return LocalRedirect(returnUrl);
             }
 
-            return RedirectToAction("Index", "Home");
+            return RedirectToAction("Index", "Listings");
         }
 
         ModelState.AddModelError(string.Empty, "Invalid login attempt.");
@@ -95,6 +95,6 @@ public class AccountController(UserManager<AppUser> userManager, SignInManager<A
     public async Task<IActionResult> Logout()
     {
         await signInManager.SignOutAsync();
-        return RedirectToAction("Index", "Home");
+        return RedirectToAction("Index", "Listings");
     }
 }
