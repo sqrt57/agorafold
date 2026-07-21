@@ -1,0 +1,11 @@
+<h1>My listings</h1>
+<a routerLink="/listings/new">Post a new listing</a>
+
+@if (listings().length === 0) {
+  <p class="muted">You haven't posted any listings yet.</p>
+}
+<ul class="listing-grid">
+  @for (listing of listings(); track listing.id) {
+    <li><app-listing-card [listing]="listing" /></li>
+  }
+</ul>

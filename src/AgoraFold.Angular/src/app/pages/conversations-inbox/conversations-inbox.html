@@ -1,0 +1,14 @@
+<h1>Messages</h1>
+@if (conversations().length === 0) {
+  <p class="muted">No conversations yet.</p>
+}
+<ul class="conversation-list">
+  @for (conversation of conversations(); track conversation.id) {
+    <li>
+      <a [routerLink]="['/conversations', conversation.id]">
+        <strong>{{ conversation.listingTitle }}</strong> &middot; {{ conversation.otherPartyDisplayName }}
+      </a>
+      <p class="muted">{{ conversation.lastMessageIsMine ? 'You: ' : '' }}{{ conversation.lastMessageBody }}</p>
+    </li>
+  }
+</ul>

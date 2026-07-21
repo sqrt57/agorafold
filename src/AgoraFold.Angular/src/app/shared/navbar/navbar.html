@@ -1,0 +1,16 @@
+<nav class="navbar">
+  <a routerLink="/" class="brand">AgoraFold</a>
+  <div class="links">
+    <a routerLink="/">Browse</a>
+    @if (auth.user(); as user) {
+      <a routerLink="/listings/new">Post a listing</a>
+      <a routerLink="/listings/mine">My listings</a>
+      <a routerLink="/conversations">Messages</a>
+      <span class="muted">{{ user.displayName }}</span>
+      <button class="secondary" [disabled]="loggingOut()" (click)="logout()">Log out</button>
+    } @else {
+      <a routerLink="/login">Log in</a>
+      <a routerLink="/register">Register</a>
+    }
+  </div>
+</nav>

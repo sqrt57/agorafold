@@ -1,0 +1,56 @@
+<h1>{{ isEdit() ? 'Edit listing' : 'Post a listing' }}</h1>
+
+@if (errors().length) {
+  <ul class="error-list">
+    @for (error of errors(); track error) {
+      <li>{{ error }}</li>
+    }
+  </ul>
+}
+
+<form (submit)="submit($event)">
+  <label>
+    Title
+    <input [ngModel]="title()" (ngModelChange)="title.set($event)" name="title" type="text" required maxlength="200" />
+  </label>
+  <label>
+    Description
+    <textarea [ngModel]="description()" (ngModelChange)="description.set($event)" name="description" required maxlength="4000"></textarea>
+  </label>
+  <label>
+    Price (optional)
+    <input [ngModel]="price()" (ngModelChange)="price.set($event)" name="price" type="number" min="0" step="0.01" />
+  </label>
+  <label>
+    Category
+    <select [ngModel]="categoryId()" (ngModelChange)="categoryId.set($event)" name="categoryId" required>
+      @for (category of categories(); track category.id) {
+        <option [value]="category.id">{{ category.name }}</option>
+      }
+    </select>
+  </label>
+  @if (!isEdit()) {
+    <label>
+      Images
+      <input type="file" accept="image/*" multiple (change)="onImageFilesChange($event)" />
+    </label>
+  }
+  <button type="submit" [disabled]="saving()">{{ isEdit() ? 'Save changes' : 'Post listing' }}</button>
+</form>
+
+@if (isEdit()) {
+  <h2>Images</h2>
+  <ul class="image-gallery">
+    @for (image of images(); track image.id) {
+      <li>
+        <img [src]="imageUrl(image.url)" alt="" />
+        <button class="danger" (click)="removeImage(image.id)">Remove</button>
+      </li>
+    }
+  </ul>
+  <label>
+    Add images
+    <input type="file" accept="image/*" multiple (change)="onImageFilesChange($event)" />
+  </label>
+  <button class="secondary" (click)="addMoreImages()">Upload</button>
+}

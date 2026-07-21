@@ -1,0 +1,29 @@
+@if (listing(); as listing) {
+  <h1>{{ listing.title }}</h1>
+  <p class="muted">{{ listing.categoryName }} &middot; listed by {{ listing.ownerDisplayName }}</p>
+  @if (listing.price != null) {
+    <p><strong>${{ listing.price }}</strong></p>
+  }
+
+  @if (listing.images.length > 0) {
+    <ul class="image-gallery">
+      @for (image of listing.images; track image.id) {
+        <li><img [src]="imageUrl(image.url)" [alt]="listing.title" /></li>
+      }
+    </ul>
+  }
+
+  <p>{{ listing.description }}</p>
+  @if (error()) {
+    <p class="error">{{ error() }}</p>
+  }
+
+  @if (listing.isOwner) {
+    <div>
+      <a [routerLink]="['/listings', listing.id, 'edit']">Edit listing</a> &middot;
+      <button class="danger" (click)="deleteListing()">Delete listing</button>
+    </div>
+  } @else if (listing.canMessage) {
+    <button (click)="messageSeller()" [disabled]="messaging()">Message seller</button>
+  }
+}

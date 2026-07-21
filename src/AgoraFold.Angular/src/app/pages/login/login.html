@@ -1,0 +1,19 @@
+<h1>Log in</h1>
+@if (error()) {
+  <p class="error">{{ error() }}</p>
+}
+<form (submit)="submit($event)">
+  <label>
+    Email
+    <input [ngModel]="email()" (ngModelChange)="email.set($event)" name="email" type="email" required autocomplete="username" />
+  </label>
+  <label>
+    Password
+    <input [ngModel]="password()" (ngModelChange)="password.set($event)" name="password" type="password" required autocomplete="current-password" />
+  </label>
+  <label class="checkbox-label">
+    <input [ngModel]="rememberMe()" (ngModelChange)="rememberMe.set($event)" name="rememberMe" type="checkbox" />
+    Remember me
+  </label>
+  <button type="submit" [disabled]="submitting()">Log in</button>
+</form>

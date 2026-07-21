@@ -1,0 +1,24 @@
+@if (thread(); as thread) {
+  <h1>{{ thread.listingTitle }}</h1>
+  <a [routerLink]="['/listings', thread.listingId]">View listing</a>
+
+  <div>
+    @for (message of thread.messages; track $index) {
+      <div class="message" [class.mine]="message.isMine">
+        <div class="meta">{{ message.senderDisplayName }} &middot; {{ message.sentAt | date: 'medium' }}</div>
+        <div>{{ message.body }}</div>
+      </div>
+    }
+  </div>
+
+  @if (error()) {
+    <p class="error">{{ error() }}</p>
+  }
+  <form (submit)="sendReply($event)">
+    <label>
+      Reply
+      <textarea [ngModel]="replyBody()" (ngModelChange)="replyBody.set($event)" name="replyBody" required></textarea>
+    </label>
+    <button type="submit" [disabled]="sending()">Send</button>
+  </form>
+}

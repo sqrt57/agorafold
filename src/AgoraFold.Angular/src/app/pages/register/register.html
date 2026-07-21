@@ -1,0 +1,23 @@
+<h1>Register</h1>
+@if (errors().length) {
+  <ul class="error-list">
+    @for (error of errors(); track error) {
+      <li>{{ error }}</li>
+    }
+  </ul>
+}
+<form (submit)="submit($event)">
+  <label>
+    Email
+    <input [ngModel]="email()" (ngModelChange)="email.set($event)" name="email" type="email" required autocomplete="username" />
+  </label>
+  <label>
+    Display name
+    <input [ngModel]="displayName()" (ngModelChange)="displayName.set($event)" name="displayName" type="text" required />
+  </label>
+  <label>
+    Password
+    <input [ngModel]="password()" (ngModelChange)="password.set($event)" name="password" type="password" required autocomplete="new-password" />
+  </label>
+  <button type="submit" [disabled]="submitting()">Register</button>
+</form>

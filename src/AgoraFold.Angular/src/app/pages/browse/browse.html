@@ -1,0 +1,38 @@
+<h1>Browse listings</h1>
+
+<form class="filters" (submit)="applyFilters($event)">
+  <label>
+    Category
+    <select [ngModel]="categoryId()" (ngModelChange)="categoryId.set($event)" name="categoryId">
+      <option value="">All categories</option>
+      @for (category of categories(); track category.id) {
+        <option [value]="category.id">{{ category.name }}</option>
+      }
+    </select>
+  </label>
+  <label>
+    Search
+    <input [ngModel]="searchTerm()" (ngModelChange)="searchTerm.set($event)" name="searchTerm" type="text" placeholder="Search listings" />
+  </label>
+  <button type="submit">Apply</button>
+</form>
+
+@if (loading()) {
+  <p>Loading...</p>
+} @else if (result(); as result) {
+  @if (result.items.length === 0) {
+    <p class="muted">No listings found.</p>
+  }
+  <ul class="listing-grid">
+    @for (listing of result.items; track listing.id) {
+      <li><app-listing-card [listing]="listing" /></li>
+    }
+  </ul>
+  <app-pagination
+    [page]="result.page"
+    [totalPages]="result.totalPages"
+    [hasPreviousPage]="result.hasPreviousPage"
+    [hasNextPage]="result.hasNextPage"
+    (pageChange)="goToPage($event)"
+  />
+}

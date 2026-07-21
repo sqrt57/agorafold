@@ -1,0 +1,8 @@
+<app-navbar />
+<main class="container">
+  @if (!auth.hydrated()) {
+    <p>Loading...</p>
+  } @else {
+    <router-outlet />
+  }
+</main>
