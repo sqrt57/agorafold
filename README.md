@@ -1,6 +1,6 @@
 # agorafold
 
-One EF Core/PostgreSQL backend, many ASP.NET frontends — a classifieds board built across MVC, Razor Pages, Blazor, HTMX, and Web API.
+One EF Core/PostgreSQL backend, many ASP.NET frontends — a classifieds board built across MVC, Razor Pages, Blazor, HTMX, and Web API (with React, Svelte, Angular, and SolidJS frontends).
 
 ## What is this?
 
@@ -14,7 +14,11 @@ A classifieds board app used as a showroom for ASP.NET web rendering models. A s
 | Razor Pages | Page-centric server rendering |
 | Blazor Server | Interactive server-side components |
 | Blazor WebAssembly | Client-side .NET SPA |
-| Web API + JS frontend | REST API with a JavaScript framework frontend |
+| Web API + Vue | REST API with a Vue 3 + TypeScript frontend |
+| Web API + React | REST API with a React frontend |
+| Web API + Svelte | REST API with a Svelte frontend |
+| Web API + Angular | REST API with an Angular frontend |
+| Web API + SolidJS | REST API with a SolidJS frontend |
 | HTMX | Hypermedia-driven progressive enhancement |
 
 ## License
