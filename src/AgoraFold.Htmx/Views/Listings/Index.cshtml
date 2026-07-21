@@ -1,0 +1,26 @@
+@model ListingIndexViewModel
+@{
+    ViewData["Title"] = "Browse Listings";
+}
+
+<h1>Browse Listings</h1>
+
+<form id="filter-form" class="row g-2 mb-4"
+      hx-get="@Url.Action("Index")" hx-target="#results" hx-swap="innerHTML" hx-push-url="true"
+      hx-trigger="change, keyup changed delay:300ms from:#searchTerm">
+    <div class="col-auto">
+        <select name="categoryId" id="categoryId" class="form-select" asp-items="Model.Categories">
+            <option value="">All categories</option>
+        </select>
+    </div>
+    <div class="col-auto">
+        <input type="text" name="searchTerm" id="searchTerm" value="@Model.SearchTerm" class="form-control" placeholder="Search title or description" />
+    </div>
+    <div class="col-auto">
+        <button type="submit" class="btn btn-primary">Search</button>
+    </div>
+</form>
+
+<div id="results">
+    @await Html.PartialAsync("_ListingResults", Model)
+</div>

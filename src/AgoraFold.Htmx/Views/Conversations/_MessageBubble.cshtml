@@ -1,0 +1,6 @@
+@model ConversationMessageViewModel
+
+<div class="mb-2 @(Model.IsMine ? "text-end" : "")">
+    <div><strong>@Model.SenderDisplayName</strong> <small class="text-muted">@Model.SentAt.ToString("g")</small></div>
+    <div class="d-inline-block p-2 rounded @(Model.IsMine ? "bg-primary text-white" : "bg-light")">@Model.Body</div>
+</div>

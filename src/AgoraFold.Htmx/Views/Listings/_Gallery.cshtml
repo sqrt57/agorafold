@@ -1,0 +1,39 @@
+@model ListingGalleryViewModel
+
+<div id="gallery">
+    @if (Model.ErrorMessage is not null)
+    {
+        <div class="alert alert-danger">@Model.ErrorMessage</div>
+    }
+
+    @if (Model.Images.Count == 0)
+    {
+        <p class="text-muted">No images yet.</p>
+    }
+    else
+    {
+        <div class="row g-2 mb-3">
+            @foreach (var image in Model.Images)
+            {
+                <div class="col-auto text-center">
+                    <img src="@image.Url" style="height:120px;object-fit:cover;" class="d-block mb-1" alt="Listing image" />
+                    <button type="button" class="btn btn-sm btn-outline-danger"
+                            hx-delete="@Url.Action("DeleteImage", "Listings", new { imageId = image.Id, listingId = Model.ListingId })"
+                            hx-target="#gallery" hx-swap="outerHTML"
+                            hx-confirm="Delete this image?">Delete</button>
+                </div>
+            }
+        </div>
+    }
+
+    <form hx-post="@Url.Action("AddImages", "Listings", new { id = Model.ListingId })"
+          hx-target="#gallery" hx-swap="outerHTML" hx-encoding="multipart/form-data"
+          class="row g-2">
+        <div class="col-auto">
+            <input type="file" name="images" multiple accept="image/jpeg,image/png,image/webp" class="form-control" />
+        </div>
+        <div class="col-auto">
+            <button type="submit" class="btn btn-secondary">Add Images</button>
+        </div>
+    </form>
+</div>

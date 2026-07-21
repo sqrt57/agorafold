@@ -1,0 +1,34 @@
+@model ConversationThreadViewModel
+@{
+    ViewData["Title"] = "Conversation";
+}
+
+<h1>
+    <a asp-controller="Listings" asp-action="Details" asp-route-id="@Model.ListingId">@Model.ListingTitle</a>
+</h1>
+
+<div id="messages" class="border rounded p-3 mb-3" style="max-height:400px;overflow-y:auto;"
+     hx-get="@Url.Action("Poll", new { id = Model.Id })"
+     hx-trigger="every 5s"
+     hx-vals='js:{sinceId: document.getElementById("last-message-id").value}'
+     hx-swap="beforeend">
+    @if (Model.Messages.Count == 0)
+    {
+        <p class="text-muted" id="empty-hint">No messages yet. Say hello!</p>
+    }
+    @foreach (var message in Model.Messages)
+    {
+        @await Html.PartialAsync("_MessageBubble", message)
+    }
+</div>
+<input type="hidden" id="last-message-id" value="@(Model.Messages.Count > 0 ? Model.Messages[^1].Id : 0)" />
+
+<form hx-post="@Url.Action("Reply", new { id = Model.Id })"
+      hx-target="#messages" hx-swap="beforeend"
+      hx-on::after-request="if (event.detail.successful) this.reset()">
+    <div class="mb-3">
+        <textarea name="Body" class="form-control" rows="3" placeholder="Write a reply..." maxlength="4000"></textarea>
+        <div id="reply-error" class="text-danger"></div>
+    </div>
+    <button type="submit" class="btn btn-primary">Send</button>
+</form>

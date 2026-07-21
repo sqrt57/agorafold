@@ -1,0 +1,44 @@
+@model IReadOnlyList<ListingSummaryViewModel>
+@{
+    ViewData["Title"] = "My Listings";
+}
+
+<h1>My Listings</h1>
+
+<p><a class="btn btn-primary" asp-controller="Listings" asp-action="Create">Post a Listing</a></p>
+
+@if (Model.Count == 0)
+{
+    <p>You haven't posted any listings yet.</p>
+}
+else
+{
+    <table class="table">
+        <thead>
+            <tr>
+                <th>Title</th>
+                <th>Category</th>
+                <th>Price</th>
+                <th>Created</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var item in Model)
+            {
+                <tr>
+                    <td><a asp-controller="Listings" asp-action="Details" asp-route-id="@item.Id">@item.Title</a></td>
+                    <td>@item.CategoryName</td>
+                    <td>@(item.Price.HasValue ? item.Price.Value.ToString("C") : "-")</td>
+                    <td>@item.CreatedAt.ToString("d")</td>
+                    <td>
+                        <a asp-controller="Listings" asp-action="Edit" asp-route-id="@item.Id">Edit</a>
+                        <button type="button" class="btn btn-sm btn-link text-danger p-0 ms-2"
+                                hx-post="@Url.Action("DeleteListing", new { id = item.Id })"
+                                hx-confirm="Delete this listing? This cannot be undone.">Delete</button>
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
