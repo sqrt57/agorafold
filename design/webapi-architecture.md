@@ -2,7 +2,7 @@
 
 ## Summary
 
-The JSON API backend for the "Web API + JS frontend" family of variants. Consumed by `AgoraFold.Vue` (Vite/Vue 3 + TypeScript SPA), `AgoraFold.React` (Vite/React + TypeScript SPA), `AgoraFold.Svelte` (Vite/Svelte + TypeScript SPA), and `AgoraFold.Angular` (Angular CLI + TypeScript SPA); the planned SolidJS variant will consume this same API rather than getting their own backend, so the auth/CORS/CSRF design below applies to all of them. Ports: `http://localhost:5155`, `https://localhost:7131` (Vue dev server: `http://localhost:5173`, React dev server: `http://localhost:5174`, Svelte dev server: `http://localhost:5175`, Angular dev server: `http://localhost:5176`).
+The JSON API backend for the "Web API + JS frontend" family of variants. Consumed by `AgoraFold.Vue` (Vite/Vue 3 + TypeScript SPA), `AgoraFold.React` (Vite/React + TypeScript SPA), `AgoraFold.Svelte` (Vite/Svelte + TypeScript SPA), `AgoraFold.Angular` (Angular CLI + TypeScript SPA), and `AgoraFold.SolidJS` (Vite/Solid + TypeScript SPA) — the last and final planned JS frontend. Ports: `http://localhost:5155`, `https://localhost:7131` (Vue dev server: `http://localhost:5173`, React dev server: `http://localhost:5174`, Svelte dev server: `http://localhost:5175`, Angular dev server: `http://localhost:5176`, SolidJS dev server: `http://localhost:5177`).
 
 No separate spec doc exists for this variant — it predates the current per-variant `-spec.md` convention. This document is the architecture reference; new JS frontend variants should link back here rather than re-documenting the backend.
 
@@ -36,6 +36,15 @@ No separate spec doc exists for this variant — it predates the current per-var
 - Auth/hydration state lives in an injectable `AuthService` (`src/app/auth/auth.service.ts`) using signals for `user`/`hydrated`, with the same memoized-hydrate-promise pattern the other clients use to dedupe the initial `/api/account/me` call.
 - Unlike the other three clients' hand-rolled routers, `AgoraFold.Angular` uses the real Angular Router (`src/app/app.routes.ts`) — protected routes carry a functional `authGuard: CanActivateFn` that awaits `AuthService.hydrate()` before deciding, redirecting to `/login?returnUrl=...` on failure, same as the others' behavior.
 - Its dev server runs at `http://localhost:5176` (`ng serve`, configured for this fixed port in `angular.json`); like the other three clients it calls `AgoraFold.WebApi` directly cross-origin rather than through a dev-server proxy, via `environment.apiBaseUrl` (`http://localhost:5155` in dev, same pattern as the other clients' `VITE_API_BASE_URL`) prefixed onto image URLs by the ported `imageUrl()` helper.
+
+## SolidJS client specifics
+
+- `AgoraFold.SolidJS` is a frontend-only Vite project (`solid-ts` template), like Vue/React/Svelte, and is not added to `AgoraFold.slnx`. It's the last planned JS frontend variant.
+- It ports the same `src/api/*.ts` contract and global CSS (`src/style.css`, copied from `AgoraFold.Svelte`'s version) unmodified.
+- Routing uses `@solidjs/router`'s `<Router root={Layout}>` (root wraps every route in `AuthProvider` + `NavBar`) with a flat list of `<Route>` elements in `App.tsx`; `<A>` replaces `<Link>`/anchor components from the other clients, and `<Navigate>` replaces `RequireAuth`'s redirect.
+- Auth lives in `src/context/AuthContext.tsx`, a `createContext`/`useContext` pair using `createSignal` for `user`/`hydrated` state. Unlike React's `AuthProvider`, no ref/memo dedupe trick is needed for the initial `/api/account/me` hydration call — Solid component functions run once (not once per render), so a plain `onMount` is sufficient.
+- Solid's fine-grained reactivity means props must stay as accessors: components read `props.foo` directly (never destructured) and signals are called as functions (`user()`, not `user`) at the point of use, including inside JSX — destructuring either breaks reactivity.
+- Its dev server runs at `http://localhost:5177` (`vite`, `server.port` fixed in `vite.config.ts`), calling `AgoraFold.WebApi` directly cross-origin like the other four clients, via `VITE_API_BASE_URL`.
 
 ## Auth
 
