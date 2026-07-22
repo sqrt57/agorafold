@@ -21,6 +21,35 @@ A classifieds board app used as a showroom for ASP.NET web rendering models. A s
 | Web API + SolidJS | REST API with a SolidJS frontend |
 | HTMX | Hypermedia-driven progressive enhancement |
 
+## Running the projects
+
+Start PostgreSQL before running any project:
+
+```sh
+docker compose up -d
+```
+
+Build the solution with `dotnet build`, then run any server-rendered variant:
+
+```sh
+dotnet run --project src/AgoraFold.Mvc          # http://localhost:5151
+dotnet run --project src/AgoraFold.RazorPages   # http://localhost:5153
+dotnet run --project src/AgoraFold.WebApi       # http://localhost:5155
+dotnet run --project src/AgoraFold.Htmx         # http://localhost:5157
+dotnet run --project src/AgoraFold.BlazorServer # http://localhost:5159
+dotnet run --project src/AgoraFold.BlazorWasm   # http://localhost:5161
+```
+
+The JavaScript clients use the shared Web API. Run `AgoraFold.WebApi` first, then start the client you want (run `npm install` once per client before its first run):
+
+```sh
+cd src/AgoraFold.Vue && npm run dev       # http://localhost:5173
+cd src/AgoraFold.React && npm run dev     # http://localhost:5174
+cd src/AgoraFold.Svelte && npm run dev    # http://localhost:5175
+cd src/AgoraFold.Angular && npm run start # http://localhost:5176
+cd src/AgoraFold.SolidJS && npm run dev   # http://localhost:5177
+```
+
 ## License
 
 MIT — see [LICENSE](LICENSE).
