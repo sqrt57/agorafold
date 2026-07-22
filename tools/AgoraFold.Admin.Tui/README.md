@@ -2,6 +2,8 @@
 
 Interactive terminal UI for the same local Identity administration operations as `AgoraFold.Admin`.
 
+The UI is built with Terminal.Gui 2.4.17, which provides terminal rendering, keyboard navigation, modal dialogs, and text fields.
+
 ```text
 docker compose up -d
 dotnet run --project tools/AgoraFold.Admin.Tui

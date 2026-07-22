@@ -1,416 +1,440 @@
-using System.Diagnostics;
-using System.Text;
+using System.Collections.ObjectModel;
+using Terminal.Gui.App;
+using Terminal.Gui.Drivers;
+using Terminal.Gui.Input;
+using Terminal.Gui.ViewBase;
+using Terminal.Gui.Views;
 
 namespace AgoraFold.Admin;
 
 public sealed class AdminTui(AdminUserService userService)
 {
+    private IApplication _app = null!;
+    private Window _window = null!;
+    private ListView _activeList = null!;
+    private Action _activateCurrentSelection = null!;
+    private int _activeItemCount;
+    private bool _showingUserActions;
+    private bool _modalOpen;
+    private IReadOnlyList<AdminUserSummary> _users = [];
+    private bool _busy;
+
     public async Task<int> RunAsync()
     {
-        var selectedIndex = 0;
+        using var app = Application.Create();
+        app.Init();
+        _app = app;
+        _app.Keyboard.KeyDown += HandleApplicationKeyDown;
+        _users = await userService.ListAsync();
 
-        while (true)
-        {
-            var users = await userService.ListAsync();
-            var itemCount = users.Count + 1;
-            selectedIndex = Math.Clamp(selectedIndex, 0, itemCount - 1);
-
-            ConsoleKey key;
-            do
-            {
-                RenderUsers(users, selectedIndex);
-                key = ReadNavigationKey();
-                selectedIndex = MoveSelection(key, selectedIndex, itemCount);
-                if (NumberFromKey(key) is not null)
-                {
-                    key = ConsoleKey.Enter;
-                }
-            }
-            while (key is not (ConsoleKey.Enter or ConsoleKey.Escape or ConsoleKey.Q));
-
-            if (key is ConsoleKey.Escape or ConsoleKey.Q)
-            {
-                return 0;
-            }
-
-            if (selectedIndex == users.Count)
-            {
-                await AddAsync();
-            }
-            else
-            {
-                await UserActionsAsync(users[selectedIndex]);
-            }
-        }
+        ShowMainScreen();
+        await app.RunAsync(_window, CancellationToken.None, null);
+        return 0;
     }
 
     public static void PrintUsage()
     {
         Console.WriteLine("AgoraFold.Admin.Tui");
         Console.WriteLine();
-        Console.WriteLine("Interactive user administration. Use Up/Down to highlight, number keys to open immediately, Enter to open the highlighted row, and Esc/Q to exit.");
+        Console.WriteLine("Interactive user administration powered by Terminal.Gui.");
+        Console.WriteLine("Use Up/Down to navigate, number keys to run items immediately, Enter to run the highlighted item, and Esc/Q to go back or exit.");
         Console.WriteLine();
         Console.WriteLine("Run with:");
         Console.WriteLine("  dotnet run --project tools/AgoraFold.Admin.Tui");
     }
 
-    private static int MoveSelection(ConsoleKey key, int selectedIndex, int itemCount)
+    private void ShowMainScreen()
     {
-        if (key == ConsoleKey.UpArrow)
+        _window = new Window
         {
-            return selectedIndex == 0 ? itemCount - 1 : selectedIndex - 1;
-        }
+            Title = "AgoraFold Admin",
+            Width = Dim.Fill(),
+            Height = Dim.Fill(),
+        };
 
-        if (key == ConsoleKey.DownArrow)
+        var users = new ObservableCollection<string>(BuildUserItems());
+        var list = new ListView
         {
-            return selectedIndex == itemCount - 1 ? 0 : selectedIndex + 1;
-        }
+            X = 1,
+            Y = 2,
+            Width = Dim.Fill(1),
+            Height = Dim.Fill(2),
+        };
+        list.SetSource(users);
+        list.Accepted += (_, _) => _ = ExecuteMainSelectionAsync(list);
+        list.KeyDown += (_, key) => HandleMenuKey(key, list, users.Count + 1, () => _ = ExecuteMainSelectionAsync(list), isMainMenu: true);
+        _activeList = list;
+        _activateCurrentSelection = () => _ = ExecuteMainSelectionAsync(list);
+        _activeItemCount = users.Count + 1;
+        _showingUserActions = false;
 
-        var number = NumberFromKey(key);
-        if (number is null)
-        {
-            return selectedIndex;
-        }
-
-        var numberIndex = number.Value == 0 ? itemCount - 1 : number.Value - 1;
-        return numberIndex < itemCount ? numberIndex : selectedIndex;
-    }
-
-    private static void RenderUsers(IReadOnlyList<AdminUserSummary> users, int selectedIndex)
-    {
-        if (!Console.IsOutputRedirected)
-        {
-            Console.Clear();
-        }
-
-        Console.WriteLine("AgoraFold Admin");
-        Console.WriteLine("===============");
-        Console.WriteLine("Users (Up/Down to highlight, number keys to open immediately, Enter to open, Esc/Q to exit)");
-        Console.WriteLine();
-
-        if (users.Count == 0)
-        {
-            Console.WriteLine("  No users found.");
-        }
-
-        for (var i = 0; i < users.Count; i++)
-        {
-            var user = users[i];
-            WriteUserRow(i == selectedIndex, i + 1, user);
-        }
-
-        var addNumber = users.Count + 1 == 10 ? 0 : users.Count + 1;
-        WriteRow(selectedIndex == users.Count, $"{addNumber}. + Add user");
-    }
-
-    private static void WriteUserRow(bool selected, int number, AdminUserSummary user)
-    {
-        var useColor = !Console.IsOutputRedirected;
-        var foreground = Console.ForegroundColor;
-        var background = Console.BackgroundColor;
-        if (selected && useColor)
-        {
-            Console.ForegroundColor = ConsoleColor.White;
-            Console.BackgroundColor = ConsoleColor.DarkGray;
-        }
-
-        Console.Write($"{(selected ? ">" : " ")} {(number == 10 ? 0 : number)}. {user.DisplayName} <{user.Email}> ");
-        if (useColor)
-        {
-            Console.ForegroundColor = user.IsActive ? ConsoleColor.Green : ConsoleColor.Red;
-        }
-
-        Console.Write(user.IsActive ? "[active]" : "[inactive]");
-        if (useColor)
-        {
-            Console.ForegroundColor = foreground;
-            Console.BackgroundColor = background;
-        }
-
-        Console.WriteLine();
-    }
-
-    private static void WriteRow(bool selected, string text)
-    {
-        var useColor = !Console.IsOutputRedirected;
-        var foreground = Console.ForegroundColor;
-        var background = Console.BackgroundColor;
-        if (selected && useColor)
-        {
-            Console.ForegroundColor = ConsoleColor.White;
-            Console.BackgroundColor = ConsoleColor.DarkGray;
-        }
-
-        Console.WriteLine($"{(selected ? ">" : " ")} {text}");
-        if (useColor)
-        {
-            Console.ForegroundColor = foreground;
-            Console.BackgroundColor = background;
-        }
-    }
-
-    private static void WriteStatus(bool isActive)
-    {
-        var useColor = !Console.IsOutputRedirected;
-        Console.Write("Status: ");
-        if (useColor)
-        {
-            Console.ForegroundColor = isActive ? ConsoleColor.Green : ConsoleColor.Red;
-        }
-
-        Console.WriteLine(isActive ? "active" : "inactive");
-        if (useColor)
-        {
-            Console.ResetColor();
-        }
-    }
-
-    private async Task UserActionsAsync(AdminUserSummary user)
-    {
-        var actions = 5;
-        var selectedIndex = 0;
-        while (true)
-        {
-            ClearScreen();
-            Console.WriteLine($"User: {user.DisplayName} <{user.Email}>");
-            WriteStatus(user.IsActive);
-            Console.WriteLine();
-            WriteRow(selectedIndex == 0, "1. Activate user");
-            WriteRow(selectedIndex == 1, "2. Deactivate user");
-            WriteRow(selectedIndex == 2, "3. Set password");
-            WriteRow(selectedIndex == 3, "4. Delete user");
-            WriteRow(selectedIndex == 4, "0. Back");
-            Console.WriteLine();
-
-            Console.WriteLine("Use Up/Down to highlight, number keys to run immediately, Enter to run, Esc to go back.");
-            var key = ReadNavigationKey();
-            selectedIndex = MoveSelection(key, selectedIndex, actions);
-            if (NumberFromKey(key) is not null)
+        _window.Add(
+            new Label
             {
-                key = ConsoleKey.Enter;
-            }
-            if (key is ConsoleKey.Escape or ConsoleKey.Q)
+                Text = "Users",
+                X = 1,
+                Y = 0,
+                Width = Dim.Fill(1),
+            },
+            new Label
             {
-                return;
-            }
-
-            if (key != ConsoleKey.Enter)
+                Text = "Up/Down: navigate   Number: run immediately   Enter: run   Esc/Q: exit",
+                X = 1,
+                Y = 1,
+                Width = Dim.Fill(1),
+            },
+            list,
+            new Label
             {
-                continue;
-            }
+                Text = "Select + Add user to create an account.",
+                X = 1,
+                Y = Pos.AnchorEnd(1),
+                Width = Dim.Fill(1),
+            });
+    }
 
-            switch (selectedIndex)
+    private IReadOnlyList<string> BuildUserItems()
+    {
+        var items = _users
+            .Select((user, index) => $"{DisplayNumber(index + 1)}. {user.DisplayName} <{user.Email}> [{(user.IsActive ? "active" : "inactive")}]")
+            .ToList();
+        items.Add($"{DisplayNumber(items.Count + 1)}. + Add user");
+        return items;
+    }
+
+    private async Task ExecuteMainSelectionAsync(ListView list)
+    {
+        if (_busy || list.SelectedItem is not int index || index < 0)
+        {
+            return;
+        }
+
+        _busy = true;
+        try
+        {
+            if (index == _users.Count)
+            {
+                await AddUserAsync();
+            }
+            else if (index < _users.Count)
+            {
+                ShowUserActions(_users[index]);
+            }
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private void ShowUserActions(AdminUserSummary user)
+    {
+        _window.RemoveAll();
+
+        var actions = new ObservableCollection<string>
+        {
+            "1. Activate user",
+            "2. Deactivate user",
+            "3. Set password",
+            "4. Delete user",
+            "0. Exit",
+        };
+        var list = new ListView
+        {
+            X = 1,
+            Y = 4,
+            Width = Dim.Fill(1),
+            Height = Dim.Fill(2),
+        };
+        list.SetSource(actions);
+        list.Accepted += (_, _) => _ = ExecuteUserActionAsync(user, list);
+        list.KeyDown += (_, key) => HandleMenuKey(key, list, actions.Count, () => _ = ExecuteUserActionAsync(user, list), isMainMenu: false);
+        _activeList = list;
+        _activeItemCount = actions.Count;
+        _activateCurrentSelection = () => _ = ExecuteUserActionAsync(user, list);
+        _showingUserActions = true;
+
+        _window.Add(
+            new Label
+            {
+                Text = $"User: {user.DisplayName} <{user.Email}>",
+                X = 1,
+                Y = 0,
+                Width = Dim.Fill(1),
+            },
+            new Label
+            {
+                Text = $"Status: {(user.IsActive ? "active" : "inactive")}",
+                X = 1,
+                Y = 1,
+                Width = Dim.Fill(1),
+            },
+            new Label
+            {
+                Text = "User actions",
+                X = 1,
+                Y = 3,
+                Width = Dim.Fill(1),
+            },
+            list,
+            new Label
+            {
+                Text = "Up/Down: navigate   Number: run immediately   Enter: run   Esc/Q: back",
+                X = 1,
+                Y = Pos.AnchorEnd(1),
+                Width = Dim.Fill(1),
+            });
+    }
+
+    private async Task ExecuteUserActionAsync(AdminUserSummary user, ListView list)
+    {
+        if (_busy || list.SelectedItem is not int index || index < 0)
+        {
+            return;
+        }
+
+        _busy = true;
+        try
+        {
+            switch (index)
             {
                 case 0:
-                    var activateResult = await userService.SetActiveAsync(user.Email, active: true);
-                    ShowResult(activateResult);
-                    if (activateResult.Succeeded)
-                    {
-                        user = user with { IsActive = true };
-                    }
-
+                    await SetActiveAsync(user, active: true);
                     break;
                 case 1:
-                    var deactivateResult = await userService.SetActiveAsync(user.Email, active: false);
-                    ShowResult(deactivateResult);
-                    if (deactivateResult.Succeeded)
-                    {
-                        user = user with { IsActive = false };
-                    }
-
+                    await SetActiveAsync(user, active: false);
                     break;
                 case 2:
-                    ShowResult(await userService.SetPasswordAsync(user.Email, ReadPassword("New password: ")));
+                    await SetPasswordAsync(user);
                     break;
                 case 3:
-                    if (ConfirmDelete(user.Email))
-                    {
-                        ShowResult(await userService.DeleteAsync(user.Email));
-                        return;
-                    }
-
-                    ShowMessage("Deletion cancelled.");
+                    await DeleteUserAsync(user);
                     break;
-                case 4:
-                    return;
+                default:
+                    ShowMainScreen();
+                    break;
             }
         }
-    }
-
-    private async Task AddAsync()
-    {
-        ClearScreen();
-        Console.WriteLine("Add user");
-        Console.WriteLine("========");
-        Console.WriteLine();
-        var email = ReadRequired("Email: ");
-        var displayName = ReadRequired("Display name: ");
-        var password = ReadPassword("Password: ");
-        ShowResult(await userService.AddAsync(email, displayName, password));
-    }
-
-    private static bool ConfirmDelete(string email)
-    {
-        Console.Write($"Type '{email}' to confirm deletion: ");
-        return string.Equals(Console.ReadLine(), email, StringComparison.Ordinal);
-    }
-
-    private static string ReadRequired(string prompt)
-    {
-        while (true)
+        finally
         {
-            Console.Write(prompt);
-            var value = Console.ReadLine()?.Trim();
-            if (!string.IsNullOrWhiteSpace(value))
-            {
-                return value;
-            }
-
-            Console.WriteLine("A value is required.");
+            _busy = false;
         }
     }
 
-    private static string ReadPassword(string prompt)
+    private async Task SetActiveAsync(AdminUserSummary user, bool active)
     {
-        Console.Write(prompt);
-        if (Console.IsInputRedirected)
+        var result = await userService.SetActiveAsync(user.Email, active);
+        ShowResult(result);
+        if (result.Succeeded)
         {
-            return Console.ReadLine() ?? "";
-        }
-
-        var password = new StringBuilder();
-        while (true)
-        {
-            var key = Console.ReadKey(intercept: true);
-            if (key.Key == ConsoleKey.Enter)
-            {
-                Console.WriteLine();
-                return password.ToString();
-            }
-
-            if (key.Key == ConsoleKey.Backspace)
-            {
-                if (password.Length > 0)
-                {
-                    password.Length -= 1;
-                }
-
-                continue;
-            }
-
-            if (!char.IsControl(key.KeyChar))
-            {
-                password.Append(key.KeyChar);
-            }
+            ShowUserActions(user with { IsActive = active });
         }
     }
 
-    private static void ShowResult(AdminOperationResult result) => ShowMessage(result.Message);
-
-    private static void ShowMessage(string message)
+    private async Task AddUserAsync()
     {
-        Console.WriteLine();
-        Console.WriteLine(message);
-        Console.WriteLine();
-        var foreground = Console.ForegroundColor;
-        if (!Console.IsOutputRedirected)
+        var values = ShowForm(
+            "Add user",
+            new FormField("Email", false),
+            new FormField("Display name", false),
+            new FormField("Password", true));
+        if (values is null)
         {
-            Console.ForegroundColor = ConsoleColor.Cyan;
+            return;
         }
 
-        Console.Write("Press Enter to continue...");
-        if (!Console.IsOutputRedirected)
+        var result = await userService.AddAsync(values[0], values[1], values[2]);
+        ShowResult(result);
+        if (result.Succeeded)
         {
-            Console.ForegroundColor = foreground;
+            await RefreshUsersAsync();
         }
-
-        Console.ReadLine();
     }
 
-    private static ConsoleKey ReadNavigationKey()
+    private async Task SetPasswordAsync(AdminUserSummary user)
     {
-        if (!Console.IsInputRedirected)
+        var values = ShowForm("Set password", new FormField("New password", true));
+        if (values is null)
         {
-            return ReadTerminalKey();
+            return;
         }
 
-        return Console.ReadLine()?.Trim().ToLowerInvariant() switch
+        var result = await userService.SetPasswordAsync(user.Email, values[0]);
+        ShowResult(result);
+        ShowUserActions(user);
+    }
+
+    private async Task DeleteUserAsync(AdminUserSummary user)
+    {
+        var values = ShowForm("Delete user", new FormField($"Type {user.Email} to confirm", false));
+        if (values is null)
         {
-            "up" => ConsoleKey.UpArrow,
-            "down" => ConsoleKey.DownArrow,
-            "enter" => ConsoleKey.Enter,
-            "0" => ConsoleKey.D0,
-            "q" or "quit" => ConsoleKey.Q,
-            _ => ConsoleKey.NoName,
+            return;
+        }
+
+        if (!string.Equals(values[0], user.Email, StringComparison.Ordinal))
+        {
+            ShowResult(new AdminOperationResult(false, "The confirmation text did not match the email address."));
+            ShowUserActions(user);
+            return;
+        }
+
+        var result = await userService.DeleteAsync(user.Email);
+        ShowResult(result);
+        if (result.Succeeded)
+        {
+            await RefreshUsersAsync();
+        }
+        else
+        {
+            ShowUserActions(user);
+        }
+    }
+
+    private async Task RefreshUsersAsync()
+    {
+        _users = await userService.ListAsync();
+        ShowMainScreen();
+    }
+
+    private string[]? ShowForm(string title, params FormField[] fields)
+    {
+        var dialog = new Dialog
+        {
+            Title = title,
+            Width = 72,
+            Height = Math.Max(8, fields.Length * 2 + 5),
         };
+        var textFields = new List<TextField>();
+
+        for (var i = 0; i < fields.Length; i++)
+        {
+            var field = fields[i];
+            dialog.Add(new Label
+            {
+                Text = field.Label,
+                X = 1,
+                Y = i * 2 + 1,
+                Width = 25,
+            });
+
+            var textField = new TextField
+            {
+                X = 27,
+                Y = i * 2 + 1,
+                Width = Dim.Fill(2),
+                Secret = field.Secret,
+            };
+            dialog.Add(textField);
+            textFields.Add(textField);
+        }
+
+        dialog.AddButton(new Button { Text = "_Cancel" });
+        dialog.AddButton(new Button { Text = "_OK", IsDefault = true });
+        _modalOpen = true;
+        try
+        {
+            _app.Run(dialog);
+        }
+        finally
+        {
+            _modalOpen = false;
+        }
+
+        if (dialog.Result != 1)
+        {
+            return null;
+        }
+
+        return textFields.Select(field => field.Text?.Trim() ?? string.Empty).ToArray();
     }
 
-    private static int? NumberFromKey(ConsoleKey key) => key switch
+    private void ShowResult(AdminOperationResult result)
     {
-        ConsoleKey.D0 or ConsoleKey.NumPad0 => 0,
-        ConsoleKey.D1 or ConsoleKey.NumPad1 => 1,
-        ConsoleKey.D2 or ConsoleKey.NumPad2 => 2,
-        ConsoleKey.D3 or ConsoleKey.NumPad3 => 3,
-        ConsoleKey.D4 or ConsoleKey.NumPad4 => 4,
-        ConsoleKey.D5 or ConsoleKey.NumPad5 => 5,
-        ConsoleKey.D6 or ConsoleKey.NumPad6 => 6,
-        ConsoleKey.D7 or ConsoleKey.NumPad7 => 7,
-        ConsoleKey.D8 or ConsoleKey.NumPad8 => 8,
-        ConsoleKey.D9 or ConsoleKey.NumPad9 => 9,
-        _ => null,
-    };
+        _modalOpen = true;
+        try
+        {
+            MessageBox.Query(_app, result.Succeeded ? "Success" : "Operation failed", result.Message, "_OK");
+        }
+        finally
+        {
+            _modalOpen = false;
+        }
+    }
 
-    private static ConsoleKey ReadTerminalKey()
+    private void HandleApplicationKeyDown(object? sender, Key key)
     {
-        var first = Console.ReadKey(intercept: true);
-        if (first.Key != ConsoleKey.Escape)
+        if (_modalOpen)
         {
-            return first.Key;
+            return;
         }
 
-        // ConEmu can expose arrow keys as ANSI escape sequences (ESC [ A/B)
-        // instead of ConsoleKey.UpArrow/DownArrow.
-        var deadline = Stopwatch.GetTimestamp() + Stopwatch.Frequency / 20;
-        while (!Console.KeyAvailable && Stopwatch.GetTimestamp() < deadline)
+        HandleMenuKey(key, _activeList, _activeItemCount, _activateCurrentSelection, !_showingUserActions);
+    }
+
+    private void HandleMenuKey(Key key, ListView list, int itemCount, Action activate, bool isMainMenu)
+    {
+        if (_modalOpen)
         {
-            Thread.Yield();
+            return;
         }
 
-        if (!Console.KeyAvailable)
+        if (IsEscape(key) || IsQuit(key))
         {
-            return ConsoleKey.Escape;
+            key.Handled = true;
+            if (isMainMenu)
+            {
+                _app.RequestStop();
+            }
+            else
+            {
+                ShowMainScreen();
+            }
+
+            return;
         }
 
-        var prefix = Console.ReadKey(intercept: true);
-        if (prefix.KeyChar is not ('[' or 'O'))
+        if (GetNumberIndex(key, itemCount) is not int index)
         {
-            return ConsoleKey.Escape;
+            return;
         }
 
-        var sequenceDeadline = Stopwatch.GetTimestamp() + Stopwatch.Frequency / 20;
-        while (!Console.KeyAvailable && Stopwatch.GetTimestamp() < sequenceDeadline)
-        {
-            Thread.Yield();
-        }
+        key.Handled = true;
+        list.SelectedItem = index;
+        activate();
+    }
 
-        if (!Console.KeyAvailable)
-        {
-            return ConsoleKey.Escape;
-        }
+    private static bool IsEscape(Key key) => key == Key.Esc || key.NoShift.NoCtrl.NoAlt.KeyCode == KeyCode.Esc;
 
-        return Console.ReadKey(intercept: true).KeyChar switch
+    private static bool IsQuit(Key key) => key == Key.Q || key.NoShift.NoCtrl.NoAlt.KeyCode == KeyCode.Q;
+
+    private static int? GetNumberIndex(Key key, int itemCount)
+    {
+        var number = key.NoShift.NoCtrl.NoAlt.KeyCode switch
         {
-            'A' => ConsoleKey.UpArrow,
-            'B' => ConsoleKey.DownArrow,
-            _ => ConsoleKey.Escape,
+            KeyCode.D0 => 0,
+            KeyCode.D1 => 1,
+            KeyCode.D2 => 2,
+            KeyCode.D3 => 3,
+            KeyCode.D4 => 4,
+            KeyCode.D5 => 5,
+            KeyCode.D6 => 6,
+            KeyCode.D7 => 7,
+            KeyCode.D8 => 8,
+            KeyCode.D9 => 9,
+            _ => -1,
         };
+
+        if (number < 0)
+        {
+            return null;
+        }
+
+        var index = number == 0 ? itemCount - 1 : number - 1;
+        return index >= 0 && index < itemCount ? index : null;
     }
 
-    private static void ClearScreen()
-    {
-        if (!Console.IsOutputRedirected)
-        {
-            Console.Clear();
-        }
-    }
+    private static string DisplayNumber(int number) => number == 10 ? "0" : number.ToString();
+
+    private sealed record FormField(string Label, bool Secret);
 }
