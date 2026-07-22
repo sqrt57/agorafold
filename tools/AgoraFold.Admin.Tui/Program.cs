@@ -3,9 +3,9 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 
-if (args.Length == 0 || args.Any(argument => argument is "-h" or "--help"))
+if (args.Any(argument => argument is "-h" or "--help"))
 {
-    AgoraFold.Admin.AdminCommand.PrintUsage();
+    AdminTui.PrintUsage();
     return 0;
 }
 
@@ -16,20 +16,10 @@ var builder = Host.CreateApplicationBuilder(new HostApplicationBuilderSettings
 });
 builder.Logging.ClearProviders();
 builder.Logging.AddConsole();
-
 builder.Services.AddAgoraFoldAdmin(builder.Configuration);
 
 using var host = builder.Build();
 using var scope = host.Services.CreateScope();
 var userService = scope.ServiceProvider.GetRequiredService<AdminUserService>();
 
-try
-{
-    return await AgoraFold.Admin.AdminCommand.RunAsync(args, userService);
-}
-catch (ArgumentException ex)
-{
-    Console.Error.WriteLine(ex.Message);
-    Console.Error.WriteLine("Use --help for usage.");
-    return 1;
-}
+return await new AdminTui(userService).RunAsync();

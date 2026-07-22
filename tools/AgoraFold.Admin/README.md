@@ -6,6 +6,8 @@ Small local-development CLI for ASP.NET Identity user administration. Postgres m
 docker compose up -d
 ```
 
+For an interactive terminal UI with the same operations, run `dotnet run --project tools/AgoraFold.Admin.Tui`.
+
 Commands:
 
 ```text
