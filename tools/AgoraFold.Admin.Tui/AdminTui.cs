@@ -1,9 +1,16 @@
+using System.Collections;
 using System.Collections.ObjectModel;
+using System.Collections.Specialized;
 using Terminal.Gui.App;
 using Terminal.Gui.Drivers;
 using Terminal.Gui.Input;
 using Terminal.Gui.ViewBase;
 using Terminal.Gui.Views;
+using Attribute = Terminal.Gui.Drawing.Attribute;
+using Color = Terminal.Gui.Drawing.Color;
+using ColorName16 = Terminal.Gui.Drawing.ColorName16;
+using Scheme = Terminal.Gui.Drawing.Scheme;
+using VisualRole = Terminal.Gui.Drawing.VisualRole;
 
 namespace AgoraFold.Admin;
 
@@ -27,6 +34,12 @@ public sealed class AdminTui(AdminUserService userService)
         _app.Keyboard.KeyDown += HandleApplicationKeyDown;
         _users = await userService.ListAsync();
 
+        _window = new Window
+        {
+            Title = "AgoraFold Admin",
+            Width = Dim.Fill(),
+            Height = Dim.Fill(),
+        };
         ShowMainScreen();
         await app.RunAsync(_window, CancellationToken.None, null);
         return 0;
@@ -45,14 +58,8 @@ public sealed class AdminTui(AdminUserService userService)
 
     private void ShowMainScreen()
     {
-        _window = new Window
-        {
-            Title = "AgoraFold Admin",
-            Width = Dim.Fill(),
-            Height = Dim.Fill(),
-        };
+        _window.RemoveAll();
 
-        var users = new ObservableCollection<string>(BuildUserItems());
         var list = new ListView
         {
             X = 1,
@@ -60,12 +67,12 @@ public sealed class AdminTui(AdminUserService userService)
             Width = Dim.Fill(1),
             Height = Dim.Fill(2),
         };
-        list.SetSource(users);
+        list.Source = new UserListSource(_users);
         list.Accepted += (_, _) => _ = ExecuteMainSelectionAsync(list);
-        list.KeyDown += (_, key) => HandleMenuKey(key, list, users.Count + 1, () => _ = ExecuteMainSelectionAsync(list), isMainMenu: true);
+        list.KeyDown += (_, key) => HandleMenuKey(key, list, _users.Count + 1, () => _ = ExecuteMainSelectionAsync(list), isMainMenu: true);
         _activeList = list;
         _activateCurrentSelection = () => _ = ExecuteMainSelectionAsync(list);
-        _activeItemCount = users.Count + 1;
+        _activeItemCount = _users.Count + 1;
         _showingUserActions = false;
 
         _window.Add(
@@ -91,15 +98,6 @@ public sealed class AdminTui(AdminUserService userService)
                 Y = Pos.AnchorEnd(1),
                 Width = Dim.Fill(1),
             });
-    }
-
-    private IReadOnlyList<string> BuildUserItems()
-    {
-        var items = _users
-            .Select((user, index) => $"{DisplayNumber(index + 1)}. {user.DisplayName} <{user.Email}> [{(user.IsActive ? "active" : "inactive")}]")
-            .ToList();
-        items.Add($"{DisplayNumber(items.Count + 1)}. + Add user");
-        return items;
     }
 
     private async Task ExecuteMainSelectionAsync(ListView list)
@@ -137,7 +135,6 @@ public sealed class AdminTui(AdminUserService userService)
             "2. Deactivate user",
             "3. Set password",
             "4. Delete user",
-            "0. Exit",
         };
         var list = new ListView
         {
@@ -154,6 +151,20 @@ public sealed class AdminTui(AdminUserService userService)
         _activateCurrentSelection = () => _ = ExecuteUserActionAsync(user, list);
         _showingUserActions = true;
 
+        var statusPrefix = new Label
+        {
+            Text = "Status: ",
+            X = 1,
+            Y = 1,
+        };
+        var statusValue = new Label
+        {
+            Text = user.IsActive ? "active" : "inactive",
+            X = Pos.Right(statusPrefix),
+            Y = 1,
+        };
+        statusValue.SetScheme(new Scheme(StatusAttribute(_window, user.IsActive)));
+
         _window.Add(
             new Label
             {
@@ -162,13 +173,8 @@ public sealed class AdminTui(AdminUserService userService)
                 Y = 0,
                 Width = Dim.Fill(1),
             },
-            new Label
-            {
-                Text = $"Status: {(user.IsActive ? "active" : "inactive")}",
-                X = 1,
-                Y = 1,
-                Width = Dim.Fill(1),
-            },
+            statusPrefix,
+            statusValue,
             new Label
             {
                 Text = "User actions",
@@ -184,6 +190,13 @@ public sealed class AdminTui(AdminUserService userService)
                 Y = Pos.AnchorEnd(1),
                 Width = Dim.Fill(1),
             });
+    }
+
+    private static Attribute StatusAttribute(View view, bool isActive)
+    {
+        var background = view.GetAttributeForRole(VisualRole.Normal).Background;
+        var foreground = new Color(isActive ? ColorName16.BrightGreen : ColorName16.BrightRed);
+        return new Attribute(foreground, background);
     }
 
     private async Task ExecuteUserActionAsync(AdminUserSummary user, ListView list)
@@ -209,9 +222,6 @@ public sealed class AdminTui(AdminUserService userService)
                     break;
                 case 3:
                     await DeleteUserAsync(user);
-                    break;
-                default:
-                    ShowMainScreen();
                     break;
             }
         }
@@ -430,11 +440,69 @@ public sealed class AdminTui(AdminUserService userService)
             return null;
         }
 
-        var index = number == 0 ? itemCount - 1 : number - 1;
+        // "0" matches the 10th item's on-screen label (DisplayNumber wraps 10 to "0").
+        var index = number == 0 ? 9 : number - 1;
         return index >= 0 && index < itemCount ? index : null;
     }
 
     private static string DisplayNumber(int number) => number == 10 ? "0" : number.ToString();
 
     private sealed record FormField(string Label, bool Secret);
+
+    private sealed class UserListSource(IReadOnlyList<AdminUserSummary> users) : IListDataSource
+    {
+        // A fresh instance is built for each screen; the snapshot never mutates, so this is never raised.
+#pragma warning disable CS0067
+        public event NotifyCollectionChangedEventHandler? CollectionChanged;
+#pragma warning restore CS0067
+
+        public int Count => users.Count + 1;
+
+        public int MaxItemLength => Enumerable.Range(0, Count).Max(item => GetRow(item).Text.Length);
+
+        public bool SuspendCollectionChangedEvent { get; set; }
+
+        public bool IsMarked(int item) => false;
+
+        public void SetMark(int item, bool value)
+        {
+        }
+
+        public IList ToList() => Enumerable.Range(0, Count).Select(item => GetRow(item).Text).ToList();
+
+        public bool RenderMark(ListView listView, int item, int row, bool isMarked, bool markMultiple) => false;
+
+        public void Dispose()
+        {
+        }
+
+        public void Render(ListView listView, bool selected, int item, int col, int row, int width, int start = 0)
+        {
+            var (text, statusStart, statusLength, isActive) = GetRow(item);
+            var normalAttribute = listView.GetCurrentAttribute();
+            var statusAttribute = StatusAttribute(listView, isActive);
+
+            listView.Move(col, row);
+            for (var i = 0; i < width; i++)
+            {
+                var charIndex = start + i;
+                var inStatus = statusLength > 0 && charIndex >= statusStart && charIndex < statusStart + statusLength;
+                listView.SetAttribute(inStatus ? statusAttribute : normalAttribute);
+                listView.AddRune(charIndex < text.Length ? text[charIndex] : ' ');
+            }
+        }
+
+        private (string Text, int StatusStart, int StatusLength, bool IsActive) GetRow(int item)
+        {
+            if (item == users.Count)
+            {
+                return ($"{DisplayNumber(item + 1)}. + Add user", 0, 0, false);
+            }
+
+            var user = users[item];
+            var prefix = $"{DisplayNumber(item + 1)}. {user.DisplayName} <{user.Email}> [";
+            var status = user.IsActive ? "active" : "inactive";
+            return (prefix + status + "]", prefix.Length, status.Length, user.IsActive);
+        }
+    }
 }
