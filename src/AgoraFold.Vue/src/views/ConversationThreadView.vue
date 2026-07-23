@@ -183,6 +183,9 @@ function connect(id: string, version: number) {
   }
 
   socket.onerror = () => {
+    // Same guards as the other handlers: an obsolete socket (route change, unmount)
+    // must not surface its failure in the currently selected thread.
+    if (disposed || version !== connectionVersion) return
     error.value = 'The live chat connection failed. Reconnecting…'
   }
 

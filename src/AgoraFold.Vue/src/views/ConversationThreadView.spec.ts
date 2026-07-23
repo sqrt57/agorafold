@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
+import { reactive } from 'vue'
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import ConversationThreadView from './ConversationThreadView.vue'
@@ -6,8 +7,12 @@ import * as conversationsApi from '../api/conversations'
 import type { ConversationMessage, ConversationThread } from '../api/types'
 import { useAuthStore } from '../stores/auth'
 
+// Reactive so tests can simulate in-app navigation between conversations; the factory's
+// arrow reads mockRoute lazily, after this module has finished evaluating.
+const mockRoute = reactive({ params: { id: '3' } })
+
 vi.mock('vue-router', () => ({
-  useRoute: () => ({ params: { id: '3' } }),
+  useRoute: () => mockRoute,
 }))
 
 vi.mock('../api/conversations')
@@ -96,6 +101,7 @@ async function sendReply(view: VueWrapper, body: string) {
 }
 
 beforeEach(() => {
+  mockRoute.params.id = '3'
   vi.useFakeTimers()
 })
 
@@ -143,6 +149,26 @@ it('starts only one HTTP fallback when the ack timeout and socket close both fir
   // start a second request for the same clientMessageId.
   socket.fireClose()
   expect(conversationsApi.reply).toHaveBeenCalledTimes(1)
+})
+
+it('ignores errors from an obsolete socket after switching conversations', async () => {
+  const { view, socket } = await mountConnected()
+
+  // Navigate to another conversation; it gets its own fresh socket.
+  const nextSocket = new FakeSocket()
+  vi.mocked(conversationsApi.openSocket).mockReturnValue(nextSocket as unknown as WebSocket)
+  mockRoute.params.id = '4'
+  await flushPromises()
+  nextSocket.open()
+  nextSocket.emit({ type: 'connected' })
+  await flushPromises()
+
+  // The previous conversation's socket now reports a failure. Its handler is stale —
+  // the error must not leak into the newly selected thread.
+  socket.onerror?.()
+  await flushPromises()
+
+  expect(view.find('.error').exists()).toBe(false)
 })
 
 it('keeps a newer send pending when a stale HTTP fallback completes', async () => {
