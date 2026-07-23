@@ -67,6 +67,60 @@ public sealed class ConversationWebSocketManagerTests
 
         await connection.DisposeAsync();
     }
+
+    [Fact]
+    public async Task RemovingTheLastConnectionCannotOrphanAConcurrentlyAddedOne()
+    {
+        // Regression: Remove used to check the conversation bucket for emptiness and then
+        // remove it from the top-level map — an Add landing between the two steps went into
+        // a bucket that broadcasts could no longer find, permanently orphaning a connection
+        // whose client had already been promised delivery via 'connected'.
+        var manager = new ConversationWebSocketManager();
+
+        for (var i = 0; i < 5000; i++)
+        {
+            var first = manager.Add(1, new StubWebSocket(), CancellationToken.None);
+            var newSocket = new StubWebSocket();
+            ConversationWebSocketConnection second = null!;
+
+            using var barrier = new Barrier(2);
+            await Task.WhenAll(
+                Task.Run(() =>
+                {
+                    barrier.SignalAndWait();
+                    manager.Remove(1, first);
+                }),
+                Task.Run(() =>
+                {
+                    barrier.SignalAndWait();
+                    second = manager.Add(1, newSocket, CancellationToken.None);
+                }));
+
+            await manager.BroadcastAsync(1, MessageEvent());
+
+            // An orphaned connection never receives the broadcast.
+            await newSocket.WaitForFirstSendAsync(TimeSpan.FromSeconds(5));
+
+            manager.Remove(1, second);
+            await first.DisposeAsync();
+            await second.DisposeAsync();
+        }
+    }
+
+    [Fact]
+    public async Task DisposeSurvivesAnUnexpectedSendFault()
+    {
+        var socket = new StubWebSocket { ThrowOnSends = true };
+        var connection = new ConversationWebSocketConnection(socket, CancellationToken.None);
+
+        Assert.True(connection.TryEnqueue(MessageEvent()));
+
+        // The pump must contain the fault and fail the connection instead of letting it
+        // propagate — endpoint cleanup awaits this dispose, so a faulted pump task would
+        // throw in the middle of the request's teardown.
+        await connection.DisposeAsync();
+        Assert.True(socket.Aborted);
+    }
 }
 
 /// <summary>
@@ -82,6 +136,7 @@ internal sealed class StubWebSocket : WebSocket
     private WebSocketState state = WebSocketState.Open;
 
     public bool BlockSends { get; init; }
+    public bool ThrowOnSends { get; init; }
     public bool Aborted { get; private set; }
 
     public override WebSocketCloseStatus? CloseStatus => null;
@@ -94,6 +149,13 @@ internal sealed class StubWebSocket : WebSocket
     public override Task SendAsync(ArraySegment<byte> buffer, WebSocketMessageType messageType, bool endOfMessage, CancellationToken cancellationToken)
     {
         firstSend.TrySetResult();
+
+        if (ThrowOnSends)
+        {
+            // An exception type outside the WebSocket contract, simulating an unexpected
+            // fault that the outbound pump must contain rather than propagate.
+            throw new InvalidOperationException("Unexpected send fault.");
+        }
 
         if (!BlockSends)
         {

@@ -11,6 +11,13 @@ public sealed class ConversationWebSocketManager
 {
     private readonly ConcurrentDictionary<int, ConcurrentDictionary<Guid, ConversationWebSocketConnection>> connections = new();
 
+    // Serializes bucket membership changes. Without it, Remove can observe a bucket as
+    // empty, race with an Add that inserts into that same bucket, and then remove the
+    // bucket from the top-level map — orphaning the new connection: its client has seen
+    // 'connected' but broadcasts can no longer find it, silently breaking the
+    // "no missed messages after 'connected'" guarantee. Broadcasts stay lock-free.
+    private readonly object membershipLock = new();
+
     public Task BroadcastMessageAsync(int conversationId, Message message, string senderDisplayName) =>
         BroadcastAsync(
             conversationId,
@@ -19,22 +26,29 @@ public sealed class ConversationWebSocketManager
     public ConversationWebSocketConnection Add(int conversationId, WebSocket socket, CancellationToken requestAborted)
     {
         var connection = new ConversationWebSocketConnection(socket, requestAborted);
-        var conversationConnections = connections.GetOrAdd(conversationId, _ => new());
-        conversationConnections[connection.Id] = connection;
+        lock (membershipLock)
+        {
+            var conversationConnections = connections.GetOrAdd(conversationId, _ => new());
+            conversationConnections[connection.Id] = connection;
+        }
+
         return connection;
     }
 
     public void Remove(int conversationId, ConversationWebSocketConnection connection)
     {
-        if (!connections.TryGetValue(conversationId, out var conversationConnections))
+        lock (membershipLock)
         {
-            return;
-        }
+            if (!connections.TryGetValue(conversationId, out var conversationConnections))
+            {
+                return;
+            }
 
-        conversationConnections.TryRemove(connection.Id, out _);
-        if (conversationConnections.IsEmpty)
-        {
-            connections.TryRemove(new KeyValuePair<int, ConcurrentDictionary<Guid, ConversationWebSocketConnection>>(conversationId, conversationConnections));
+            conversationConnections.TryRemove(connection.Id, out _);
+            if (conversationConnections.IsEmpty)
+            {
+                connections.TryRemove(conversationId, out _);
+            }
         }
     }
 
@@ -221,6 +235,12 @@ public sealed class ConversationWebSocketConnection : IAsyncDisposable
         }
         catch (OperationCanceledException)
         {
+        }
+        catch (Exception)
+        {
+            // The endpoint's cleanup path awaits this task (via DisposeAsync); an unexpected
+            // fault must tear the connection down, not propagate into that cleanup.
+            Fail();
         }
     }
 

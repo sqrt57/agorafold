@@ -96,8 +96,12 @@ public static class ConversationWebSocketEndpoint
             }
 
             manager.Remove(conversationId, connection);
-            await CloseSocketAsync(socket);
+            // Dispose before closing: DisposeAsync completes the outbound queue and awaits
+            // the pump, so already-enqueued broadcasts flush while the socket is still Open.
+            // Closing first would flip the socket out of Open mid-drain, making the pump's
+            // remaining sends fail and abort the socket right after the graceful close.
             await connection.DisposeAsync();
+            await CloseSocketAsync(socket);
         }
     }
 
@@ -180,7 +184,9 @@ public static class ConversationWebSocketEndpoint
                 if (payload.Length + receiveResult.Count > MaxPayloadBytes)
                 {
                     await connection.SendAsync(ConversationWebSocketEvent.CreateError("The message payload is too large."));
-                    await CloseSocketAsync(connection.Socket);
+                    // Close through the connection so the close frame serializes under the
+                    // send lock instead of interleaving with an in-flight pump send.
+                    await connection.CloseAsync(WebSocketCloseStatus.MessageTooBig, "The message payload is too large.");
                     return;
                 }
 
@@ -269,6 +275,9 @@ public static class ConversationWebSocketEndpoint
 
     private static bool IsAllowedOrigin(HttpContext context, IEnumerable<string> allowedOrigins)
     {
+        // An absent Origin is allowed deliberately: browsers always send Origin on WebSocket
+        // handshakes, so cross-site hijacking is still blocked by the allowlist — only
+        // non-browser tooling omits the header, and it still needs the auth cookie.
         var origin = context.Request.Headers.Origin.ToString();
         return string.IsNullOrEmpty(origin)
             || allowedOrigins.Contains(origin, StringComparer.OrdinalIgnoreCase);
