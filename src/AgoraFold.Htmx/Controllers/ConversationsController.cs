@@ -71,7 +71,7 @@ public class ConversationsController(IConversationService conversationService) :
         {
             try
             {
-                await conversationService.PostReplyAsync(id, CurrentUserId, reply.Body, cancellationToken);
+                await conversationService.PostReplyAsync(id, CurrentUserId, reply.Body, cancellationToken: cancellationToken);
                 var conversation = await conversationService.GetThreadAsync(id, CurrentUserId, cancellationToken);
                 var newMessage = conversation.Messages
                     .OrderByDescending(m => m.Id)

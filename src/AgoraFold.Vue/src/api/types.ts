@@ -53,6 +53,7 @@ export interface ConversationSummary {
 }
 
 export interface ConversationMessage {
+  id: number
   senderDisplayName: string
   body: string
   sentAt: string

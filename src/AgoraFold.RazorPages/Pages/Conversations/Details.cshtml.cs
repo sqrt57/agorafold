@@ -33,7 +33,7 @@ public class DetailsModel(IConversationService conversationService) : AgoraFoldP
         {
             try
             {
-                await conversationService.PostReplyAsync(id, CurrentUserId, ReplyBody, cancellationToken);
+                await conversationService.PostReplyAsync(id, CurrentUserId, ReplyBody, cancellationToken: cancellationToken);
                 return RedirectToPage(new { id });
             }
             catch (AgoraFold.Core.Exceptions.ValidationException ex)

@@ -10,7 +10,12 @@ public interface IConversationService
     /// <summary>Full thread: ordered <see cref="Conversation.Messages"/> with senders loaded. Caller must be the listing owner or the participant.</summary>
     Task<Conversation> GetThreadAsync(int conversationId, string requestingUserId, CancellationToken cancellationToken = default);
 
-    Task<Message> PostReplyAsync(int conversationId, string senderId, string body, CancellationToken cancellationToken = default);
+    /// <summary>
+    /// Persists a reply. When <paramref name="clientMessageId"/> is supplied the call is idempotent
+    /// per (conversation, sender, key): a retry returns the already-persisted message instead of
+    /// inserting a duplicate, so callers may safely resend after an ambiguous failure.
+    /// </summary>
+    Task<Message> PostReplyAsync(int conversationId, string senderId, string body, Guid? clientMessageId = null, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// The signed-in user's conversations (as owner or participant), newest-activity first.

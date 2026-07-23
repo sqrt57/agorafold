@@ -68,13 +68,21 @@ A `GET /api/antiforgery/token` endpoint (`AntiforgeryController`) hands the clie
 
 The API exposes an authenticated native WebSocket endpoint at `GET /ws/conversations/{conversationId}`. The browser's Identity cookie authenticates the handshake, and the endpoint also checks the request origin against `Cors:JsClientOrigins` before accepting it. A connected user must be the listing owner or conversation participant.
 
-The wire protocol is deliberately small:
+The wire protocol:
 
-- Client to server: `{ "type": "message", "body": "..." }`.
-- Server to clients: `{ "type": "message", "message": { "senderId": "...", "senderDisplayName": "...", "body": "...", "sentAt": "..." } }`.
-- Validation or protocol failures: `{ "type": "error", "error": "..." }`.
+- Client to server: `{ "type": "message", "body": "...", "clientMessageId": "<guid>" }`. `clientMessageId` is an optional idempotency key — retrying a send with the same key returns the already-persisted message instead of inserting a duplicate.
+- Server to the new connection, sent only after it is registered for broadcasts: `{ "type": "connected" }`. Once a client observes this event, every later commit is guaranteed to reach it as a broadcast, so a thread snapshot fetched from that point on (merged by message id) cannot miss messages — this closes the load/subscribe race on both initial connect and reconnect.
+- Server to all participants: `{ "type": "message", "message": { "id": ..., "senderId": "...", "senderDisplayName": "...", "body": "...", "sentAt": "..." } }`. `id` is the persisted message id; clients merge, dedupe, and order by it rather than trusting arrival order (concurrent broadcasts don't guarantee database order).
+- Server to the sending connection only: `{ "type": "ack", "clientMessageId": "...", "message": { ... } }`, confirming persistence of that send.
+- Validation or protocol failures: `{ "type": "error", "error": "...", "clientMessageId": ... }` (`clientMessageId` echoed when the failure relates to a specific send).
 
-The Web API's in-memory `ConversationWebSocketManager` tracks connections by conversation. Each incoming message gets a fresh DI scope, is authorized and persisted through `IConversationService`, and is broadcast only after `SaveChangesAsync` succeeds. The long-lived socket therefore never holds a scoped `AppDbContext`. The Vue conversation thread uses the socket for replies and live delivery; its initial load and reconnect recovery still use `GET /api/conversations/{id}`. The existing HTTP reply endpoint remains available for clients that have not yet migrated.
+Send idempotency is database-enforced: `messages.client_message_id` (nullable `uuid`) with a filtered unique index on `(conversation_id, sender_id, client_message_id)`; `ConversationService.PostReplyAsync` returns the existing row for a retried key, including when it loses a concurrent-insert race on the index. `POST /api/conversations/{id}/replies` accepts the same optional `clientMessageId`, and the thread/reply responses include each message's `id`, so socket and HTTP deliveries dedupe against each other.
+
+Session revocation: cookie authentication only revalidates the Identity security stamp on HTTP requests, which never covers an established socket. The endpoint therefore revalidates the session itself — `SignInManager.ValidateSecurityStampAsync` plus a lockout check — at the handshake, on every incoming message, and on a 1-minute timer for idle listeners, closing the socket with `PolicyViolation` when the session was invalidated by a password change, admin deactivation (which rotates the stamp and sets lockout), or account deletion.
+
+The Web API's in-memory `ConversationWebSocketManager` tracks connections by conversation. Each incoming message gets a fresh DI scope, is authorized and persisted through `IConversationService`, and is broadcast only after `SaveChangesAsync` succeeds. The long-lived socket therefore never holds a scoped `AppDbContext`.
+
+The Vue conversation thread uses the socket for replies and live delivery. It keeps the reply draft in the textarea until the server acknowledges persistence; an ambiguous outcome (disconnect or ack timeout while a send is pending) is resolved by retrying over HTTP with the same `clientMessageId`, and when the socket is down entirely it falls back to plain HTTP sends. Initial load and reconnect recovery use `GET /api/conversations/{id}` merged by message id, re-fetched on every `connected` event.
 
 ## Gotchas
 

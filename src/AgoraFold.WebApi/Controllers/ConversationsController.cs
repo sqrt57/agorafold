@@ -61,7 +61,7 @@ public class ConversationsController(IConversationService conversationService, C
     [ValidateCsrfToken]
     public async Task<ActionResult<ConversationThreadResponse>> Reply(int id, ReplyRequest request, CancellationToken cancellationToken)
     {
-        var message = await conversationService.PostReplyAsync(id, CurrentUserId, request.Body, cancellationToken);
+        var message = await conversationService.PostReplyAsync(id, CurrentUserId, request.Body, request.ClientMessageId, cancellationToken);
         var conversation = await conversationService.GetThreadAsync(id, CurrentUserId, cancellationToken);
 
         var senderDisplayName = conversation.Messages.First(m => m.Id == message.Id).Sender.DisplayName;
@@ -76,6 +76,7 @@ public class ConversationsController(IConversationService conversationService, C
             conversation.ListingId,
             conversation.Listing.Title,
             conversation.Messages.Select(m => new ConversationMessageResponse(
+                m.Id,
                 m.Sender.DisplayName,
                 m.Body,
                 m.SentAt,

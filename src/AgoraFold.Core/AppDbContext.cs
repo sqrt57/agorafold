@@ -56,6 +56,19 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : IdentityDbCo
             .HasForeignKey(m => m.SenderId)
             .OnDelete(DeleteBehavior.Restrict);
 
+        // Enforces send idempotency under concurrent retries: a retried (conversation,
+        // sender, client key) triple maps onto the original row instead of a duplicate.
+        modelBuilder.Entity<Message>()
+            .HasIndex(m => new { m.ConversationId, m.SenderId, m.ClientMessageId })
+            .IsUnique()
+            .HasFilter("client_message_id IS NOT NULL");
+
+        // Declared explicitly because EF otherwise drops the FK's implicit conversation_id
+        // index in favor of the composite above — which, being filtered, can't serve
+        // ordinary thread lookups (most rows have a NULL client_message_id).
+        modelBuilder.Entity<Message>()
+            .HasIndex(m => m.ConversationId);
+
         modelBuilder.Entity<Category>().HasData(
             new Category { Id = 1, Name = "Electronics" },
             new Category { Id = 2, Name = "Vehicles" },

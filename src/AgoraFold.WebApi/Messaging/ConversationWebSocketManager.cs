@@ -13,11 +13,7 @@ public sealed class ConversationWebSocketManager
     public Task BroadcastMessageAsync(int conversationId, Message message, string senderDisplayName) =>
         BroadcastAsync(
             conversationId,
-            ConversationWebSocketEvent.CreateMessage(new ConversationWebSocketMessage(
-                message.SenderId,
-                senderDisplayName,
-                message.Body,
-                message.SentAt)));
+            ConversationWebSocketEvent.CreateMessage(ConversationWebSocketMessage.From(message, senderDisplayName)));
 
     public ConversationWebSocketConnection Add(int conversationId, WebSocket socket, CancellationToken requestAborted)
     {
@@ -110,6 +106,36 @@ public sealed class ConversationWebSocketConnection(WebSocket socket, Cancellati
         catch (ObjectDisposedException)
         {
             return false;
+        }
+    }
+
+    /// <summary>
+    /// Sends a close frame under the send lock so it never interleaves with an in-flight
+    /// <see cref="SendAsync"/>. Used to revoke connections whose session became invalid.
+    /// </summary>
+    public async Task CloseAsync(WebSocketCloseStatus status, string description)
+    {
+        try
+        {
+            await sendLock.WaitAsync();
+            try
+            {
+                if (socket.State is WebSocketState.Open or WebSocketState.CloseReceived)
+                {
+                    await socket.CloseOutputAsync(status, description, CancellationToken.None);
+                }
+            }
+            finally
+            {
+                sendLock.Release();
+            }
+        }
+        catch (WebSocketException)
+        {
+            // The peer may already have closed the connection.
+        }
+        catch (ObjectDisposedException)
+        {
         }
     }
 

@@ -15,6 +15,15 @@ namespace AgoraFold.WebApi.Messaging;
 public static class ConversationWebSocketEndpoint
 {
     private const int MaxPayloadBytes = 16 * 1024;
+    private const string SessionInvalidError = "Your session is no longer valid.";
+
+    // Cookie authentication only re-checks the security stamp on HTTP requests (and only every
+    // SecurityStampValidationInterval), which never covers an established socket — so the socket
+    // re-checks it itself: at the handshake, on every incoming message, and on this timer for
+    // idle listeners. Keeps deactivated/deleted accounts and rotated stamps (password change,
+    // admin deactivation) from holding a live subscription.
+    private static readonly TimeSpan SessionRevalidationInterval = TimeSpan.FromMinutes(1);
+
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
     public static async Task HandleAsync(
@@ -38,7 +47,7 @@ public static class ConversationWebSocketEndpoint
         }
 
         var userId = context.User.FindFirstValue(ClaimTypes.NameIdentifier);
-        if (userId is null)
+        if (userId is null || await ValidateSessionAsync(scopeFactory, context.User) is null)
         {
             context.Response.StatusCode = StatusCodes.Status401Unauthorized;
             return;
@@ -62,12 +71,29 @@ public static class ConversationWebSocketEndpoint
         using var socket = await context.WebSockets.AcceptWebSocketAsync();
         var connection = manager.Add(conversationId, socket, context.RequestAborted);
 
+        using var revalidationCts = CancellationTokenSource.CreateLinkedTokenSource(context.RequestAborted);
+        var revalidationTask = RevalidateSessionPeriodicallyAsync(context.User, connection, scopeFactory, revalidationCts.Token);
+
         try
         {
+            // Sent only after manager.Add: once the client observes this event, every later
+            // commit is guaranteed to reach it as a broadcast, so a thread snapshot fetched
+            // from this point on (merged by message id) cannot miss messages.
+            await connection.SendAsync(ConversationWebSocketEvent.CreateConnected());
+
             await ReceiveMessagesAsync(context, conversationId, userId, connection, scopeFactory, manager);
         }
         finally
         {
+            revalidationCts.Cancel();
+            try
+            {
+                await revalidationTask;
+            }
+            catch (OperationCanceledException)
+            {
+            }
+
             manager.Remove(conversationId, connection);
             await CloseSocketAsync(socket);
             await connection.DisposeAsync();
@@ -83,6 +109,41 @@ public static class ConversationWebSocketEndpoint
         await using var scope = scopeFactory.CreateAsyncScope();
         var conversationService = scope.ServiceProvider.GetRequiredService<IConversationService>();
         await conversationService.GetThreadAsync(conversationId, userId, cancellationToken);
+    }
+
+    /// <summary>The signed-in user when the principal's security stamp is still current and the account is not locked out (deactivated); otherwise null.</summary>
+    private static async Task<AppUser?> ValidateSessionAsync(IServiceScopeFactory scopeFactory, ClaimsPrincipal principal)
+    {
+        await using var scope = scopeFactory.CreateAsyncScope();
+        var signInManager = scope.ServiceProvider.GetRequiredService<SignInManager<AppUser>>();
+
+        var user = await signInManager.ValidateSecurityStampAsync(principal);
+        if (user is null)
+        {
+            return null;
+        }
+
+        var userManager = scope.ServiceProvider.GetRequiredService<UserManager<AppUser>>();
+        return await userManager.IsLockedOutAsync(user) ? null : user;
+    }
+
+    private static async Task RevalidateSessionPeriodicallyAsync(
+        ClaimsPrincipal principal,
+        ConversationWebSocketConnection connection,
+        IServiceScopeFactory scopeFactory,
+        CancellationToken cancellationToken)
+    {
+        while (!cancellationToken.IsCancellationRequested && connection.SocketState == WebSocketState.Open)
+        {
+            await Task.Delay(SessionRevalidationInterval, cancellationToken);
+
+            if (await ValidateSessionAsync(scopeFactory, principal) is null)
+            {
+                await connection.SendAsync(ConversationWebSocketEvent.CreateError(SessionInvalidError));
+                await connection.CloseAsync(WebSocketCloseStatus.PolicyViolation, SessionInvalidError);
+                return;
+            }
+        }
     }
 
     private static async Task ReceiveMessagesAsync(
@@ -127,6 +188,7 @@ public static class ConversationWebSocketEndpoint
             while (!receiveResult.EndOfMessage);
 
             await HandleMessageAsync(
+                context,
                 conversationId,
                 userId,
                 connection,
@@ -138,6 +200,7 @@ public static class ConversationWebSocketEndpoint
     }
 
     private static async Task HandleMessageAsync(
+        HttpContext context,
         int conversationId,
         string userId,
         ConversationWebSocketConnection connection,
@@ -163,33 +226,43 @@ public static class ConversationWebSocketEndpoint
             return;
         }
 
+        var clientMessageId = request.ClientMessageId;
         try
         {
+            var sender = await ValidateSessionAsync(scopeFactory, context.User);
+            if (sender is null)
+            {
+                await connection.SendAsync(ConversationWebSocketEvent.CreateError(SessionInvalidError, clientMessageId));
+                await connection.CloseAsync(WebSocketCloseStatus.PolicyViolation, SessionInvalidError);
+                return;
+            }
+
             await using var scope = scopeFactory.CreateAsyncScope();
             var conversationService = scope.ServiceProvider.GetRequiredService<IConversationService>();
-            var userManager = scope.ServiceProvider.GetRequiredService<UserManager<AppUser>>();
 
-            var message = await conversationService.PostReplyAsync(conversationId, userId, request.Body ?? "", cancellationToken);
-            var sender = await userManager.FindByIdAsync(userId)
-                ?? throw new UnauthorizedAccessException("The signed-in user no longer exists.");
+            var message = await conversationService.PostReplyAsync(conversationId, userId, request.Body ?? "", clientMessageId, cancellationToken);
+            var webSocketMessage = ConversationWebSocketMessage.From(message, sender.DisplayName);
 
-            await manager.BroadcastMessageAsync(conversationId, message, sender.DisplayName);
+            // Ack the sending connection first so its draft clears promptly, then broadcast to
+            // every participant (including the sender — clients dedupe by message id).
+            if (clientMessageId is not null)
+            {
+                await connection.SendAsync(ConversationWebSocketEvent.CreateAck(clientMessageId.Value, webSocketMessage));
+            }
+
+            await manager.BroadcastAsync(conversationId, ConversationWebSocketEvent.CreateMessage(webSocketMessage));
         }
         catch (ValidationException ex)
         {
-            await connection.SendAsync(ConversationWebSocketEvent.CreateError(ex.Message));
+            await connection.SendAsync(ConversationWebSocketEvent.CreateError(ex.Message, clientMessageId));
         }
         catch (NotFoundException)
         {
-            await connection.SendAsync(ConversationWebSocketEvent.CreateError("The conversation no longer exists."));
+            await connection.SendAsync(ConversationWebSocketEvent.CreateError("The conversation no longer exists.", clientMessageId));
         }
         catch (ForbiddenException)
         {
-            await connection.SendAsync(ConversationWebSocketEvent.CreateError("You are not a participant in this conversation."));
-        }
-        catch (UnauthorizedAccessException)
-        {
-            await connection.SendAsync(ConversationWebSocketEvent.CreateError("Your session is no longer valid."));
+            await connection.SendAsync(ConversationWebSocketEvent.CreateError("You are not a participant in this conversation.", clientMessageId));
         }
     }
 

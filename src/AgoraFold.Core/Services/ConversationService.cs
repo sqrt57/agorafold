@@ -46,7 +46,7 @@ public sealed class ConversationService(AppDbContext db) : IConversationService
         var conversation = await db.Conversations
             .Include(c => c.Listing)
             .Include(c => c.Participant)
-            .Include(c => c.Messages.OrderBy(m => m.SentAt))
+            .Include(c => c.Messages.OrderBy(m => m.SentAt).ThenBy(m => m.Id))
                 .ThenInclude(m => m.Sender)
             .FirstOrDefaultAsync(c => c.Id == conversationId, cancellationToken)
             ?? throw new NotFoundException(nameof(Conversation), conversationId);
@@ -58,12 +58,13 @@ public sealed class ConversationService(AppDbContext db) : IConversationService
         // call follows PostReplyAsync in the same request), EF's identity map keeps that
         // instance at its existing position in the collection instead of the queried order,
         // so re-sort explicitly to guarantee callers see ascending SentAt order regardless.
-        conversation.Messages = conversation.Messages.OrderBy(m => m.SentAt).ToList();
+        // Id breaks SentAt ties deterministically (insertion order).
+        conversation.Messages = conversation.Messages.OrderBy(m => m.SentAt).ThenBy(m => m.Id).ToList();
 
         return conversation;
     }
 
-    public async Task<Message> PostReplyAsync(int conversationId, string senderId, string body, CancellationToken cancellationToken = default)
+    public async Task<Message> PostReplyAsync(int conversationId, string senderId, string body, Guid? clientMessageId = null, CancellationToken cancellationToken = default)
     {
         var conversation = await db.Conversations
             .Include(c => c.Listing)
@@ -71,6 +72,15 @@ public sealed class ConversationService(AppDbContext db) : IConversationService
             ?? throw new NotFoundException(nameof(Conversation), conversationId);
 
         EnsureParticipant(conversation, senderId);
+
+        if (clientMessageId is not null)
+        {
+            var existing = await FindByClientMessageIdAsync(conversationId, senderId, clientMessageId.Value, cancellationToken);
+            if (existing is not null)
+            {
+                return existing;
+            }
+        }
 
         if (string.IsNullOrWhiteSpace(body))
         {
@@ -89,13 +99,36 @@ public sealed class ConversationService(AppDbContext db) : IConversationService
             SenderId = senderId,
             Body = trimmed,
             SentAt = DateTime.UtcNow,
+            ClientMessageId = clientMessageId,
         };
 
         db.Messages.Add(message);
-        await db.SaveChangesAsync(cancellationToken);
+        try
+        {
+            await db.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateException) when (clientMessageId is not null)
+        {
+            // A concurrent retry of the same send won the unique (conversation, sender,
+            // client_message_id) index race. Detach the losing entity so it can't leak into
+            // later queries via change-tracker fixup, and return the persisted winner.
+            db.Entry(message).State = EntityState.Detached;
+            var existing = await FindByClientMessageIdAsync(conversationId, senderId, clientMessageId.Value, cancellationToken);
+            if (existing is null)
+            {
+                throw;
+            }
+
+            return existing;
+        }
 
         return message;
     }
+
+    private Task<Message?> FindByClientMessageIdAsync(int conversationId, string senderId, Guid clientMessageId, CancellationToken cancellationToken) =>
+        db.Messages.FirstOrDefaultAsync(
+            m => m.ConversationId == conversationId && m.SenderId == senderId && m.ClientMessageId == clientMessageId,
+            cancellationToken);
 
     public async Task<IReadOnlyList<Conversation>> GetInboxAsync(string userId, CancellationToken cancellationToken = default)
     {
