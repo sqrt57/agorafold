@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using System.Net.WebSockets;
 using System.Text.Json;
+using AgoraFold.Core.Entities;
 using AgoraFold.WebApi.Models.Conversations;
 
 namespace AgoraFold.WebApi.Messaging;
@@ -8,6 +9,15 @@ namespace AgoraFold.WebApi.Messaging;
 public sealed class ConversationWebSocketManager
 {
     private readonly ConcurrentDictionary<int, ConcurrentDictionary<Guid, ConversationWebSocketConnection>> connections = new();
+
+    public Task BroadcastMessageAsync(int conversationId, Message message, string senderDisplayName) =>
+        BroadcastAsync(
+            conversationId,
+            ConversationWebSocketEvent.CreateMessage(new ConversationWebSocketMessage(
+                message.SenderId,
+                senderDisplayName,
+                message.Body,
+                message.SentAt)));
 
     public ConversationWebSocketConnection Add(int conversationId, WebSocket socket, CancellationToken requestAborted)
     {

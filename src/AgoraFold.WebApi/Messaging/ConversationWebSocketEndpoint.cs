@@ -173,13 +173,7 @@ public static class ConversationWebSocketEndpoint
             var sender = await userManager.FindByIdAsync(userId)
                 ?? throw new UnauthorizedAccessException("The signed-in user no longer exists.");
 
-            await manager.BroadcastAsync(
-                conversationId,
-                ConversationWebSocketEvent.CreateMessage(new ConversationWebSocketMessage(
-                    message.SenderId,
-                    sender.DisplayName,
-                    message.Body,
-                    message.SentAt)));
+            await manager.BroadcastMessageAsync(conversationId, message, sender.DisplayName);
         }
         catch (ValidationException ex)
         {

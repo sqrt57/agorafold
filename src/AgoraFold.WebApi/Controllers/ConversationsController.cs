@@ -2,6 +2,7 @@ using System.Security.Claims;
 using AgoraFold.Core.Entities;
 using AgoraFold.Core.Services;
 using AgoraFold.WebApi.Filters;
+using AgoraFold.WebApi.Messaging;
 using AgoraFold.WebApi.Models.Conversations;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -11,7 +12,7 @@ namespace AgoraFold.WebApi.Controllers;
 [ApiController]
 [Route("api/conversations")]
 [Authorize]
-public class ConversationsController(IConversationService conversationService) : ControllerBase
+public class ConversationsController(IConversationService conversationService, ConversationWebSocketManager webSocketManager) : ControllerBase
 {
     private string CurrentUserId => User.FindFirstValue(ClaimTypes.NameIdentifier)!;
 
@@ -60,8 +61,12 @@ public class ConversationsController(IConversationService conversationService) :
     [ValidateCsrfToken]
     public async Task<ActionResult<ConversationThreadResponse>> Reply(int id, ReplyRequest request, CancellationToken cancellationToken)
     {
-        await conversationService.PostReplyAsync(id, CurrentUserId, request.Body, cancellationToken);
+        var message = await conversationService.PostReplyAsync(id, CurrentUserId, request.Body, cancellationToken);
         var conversation = await conversationService.GetThreadAsync(id, CurrentUserId, cancellationToken);
+
+        var senderDisplayName = conversation.Messages.First(m => m.Id == message.Id).Sender.DisplayName;
+        await webSocketManager.BroadcastMessageAsync(id, message, senderDisplayName);
+
         return Ok(ToThread(conversation));
     }
 
