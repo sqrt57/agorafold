@@ -121,6 +121,58 @@ public sealed class ConversationWebSocketManagerTests
         await connection.DisposeAsync();
         Assert.True(socket.Aborted);
     }
+
+    [Fact]
+    public async Task OversizedPayloadClosureCannotOverlapAnInFlightPumpSend()
+    {
+        // Regression: oversized-payload closure used to call CloseSocketAsync(connection.Socket)
+        // directly, writing the close frame straight to the socket while the pump could still be
+        // mid-SendAsync for a queued broadcast. The fix routes it through connection.CloseAsync,
+        // which shares the connection's send lock with the pump.
+        var socket = new StubWebSocket { BlockSends = true };
+        var connection = new ConversationWebSocketConnection(
+            socket, CancellationToken.None, sendTimeout: TimeSpan.FromSeconds(5));
+
+        Assert.True(connection.TryEnqueue(MessageEvent()));
+        await socket.WaitForFirstSendAsync(TimeSpan.FromSeconds(5)); // the pump's send is now in flight
+
+        var closeTask = connection.CloseAsync(WebSocketCloseStatus.MessageTooBig, "The message payload is too large.");
+
+        // Give the close a real chance to contend for the lock before the stalled peer "resumes".
+        await Task.Delay(100);
+        socket.CompletePendingSends();
+
+        await closeTask;
+
+        Assert.False(socket.ObservedOverlap);
+        await connection.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task EndpointCleanupCannotOverlapAnInFlightPumpSend()
+    {
+        // Regression: endpoint cleanup used to close the raw socket before disposing the
+        // connection, so the final close frame could interleave with a pump send still
+        // draining the outbound queue. The fix disposes first (which drains the pump) and
+        // only then calls the endpoint's own CloseSocketAsync.
+        var socket = new StubWebSocket { BlockSends = true };
+        var connection = new ConversationWebSocketConnection(
+            socket, CancellationToken.None, sendTimeout: TimeSpan.FromSeconds(5));
+
+        Assert.True(connection.TryEnqueue(MessageEvent()));
+        await socket.WaitForFirstSendAsync(TimeSpan.FromSeconds(5)); // the pump's send is now in flight
+
+        var disposeTask = connection.DisposeAsync().AsTask();
+
+        // Give dispose a real chance to be waiting on the stalled pump send before it resolves.
+        await Task.Delay(100);
+        socket.CompletePendingSends();
+
+        await disposeTask; // mirrors the endpoint's finally block: dispose, then close.
+        await ConversationWebSocketEndpoint.CloseSocketAsync(socket);
+
+        Assert.False(socket.ObservedOverlap);
+    }
 }
 
 /// <summary>
@@ -135,9 +187,16 @@ internal sealed class StubWebSocket : WebSocket
     private readonly TaskCompletionSource firstSend = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private WebSocketState state = WebSocketState.Open;
 
+    // Counts calls to SendAsync/CloseAsync/CloseOutputAsync that are currently "on the wire" —
+    // from entry until their returned task completes — so tests can prove the connection's
+    // send lock actually serializes pump sends against closes instead of just hoping timing
+    // never overlaps them.
+    private int activeWireOperations;
+
     public bool BlockSends { get; init; }
     public bool ThrowOnSends { get; init; }
     public bool Aborted { get; private set; }
+    public bool ObservedOverlap { get; private set; }
 
     public override WebSocketCloseStatus? CloseStatus => null;
     public override string? CloseStatusDescription => null;
@@ -146,35 +205,56 @@ internal sealed class StubWebSocket : WebSocket
 
     public Task WaitForFirstSendAsync(TimeSpan timeout) => firstSend.Task.WaitAsync(timeout);
 
-    public override Task SendAsync(ArraySegment<byte> buffer, WebSocketMessageType messageType, bool endOfMessage, CancellationToken cancellationToken)
+    /// <summary>Resolves every send currently blocked on <see cref="BlockSends"/>, as if the peer resumed reading.</summary>
+    public void CompletePendingSends()
     {
-        firstSend.TrySetResult();
-
-        if (ThrowOnSends)
-        {
-            // An exception type outside the WebSocket contract, simulating an unexpected
-            // fault that the outbound pump must contain rather than propagate.
-            throw new InvalidOperationException("Unexpected send fault.");
-        }
-
-        if (!BlockSends)
-        {
-            return Task.CompletedTask;
-        }
-
-        var pending = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         lock (gate)
         {
-            if (Aborted)
+            foreach (var pending in pendingSends)
             {
-                return Task.FromException(new WebSocketException(WebSocketError.ConnectionClosedPrematurely));
+                pending.TrySetResult();
             }
 
-            pendingSends.Add(pending);
+            pendingSends.Clear();
         }
+    }
 
-        cancellationToken.Register(() => pending.TrySetCanceled(cancellationToken));
-        return pending.Task;
+    public override async Task SendAsync(ArraySegment<byte> buffer, WebSocketMessageType messageType, bool endOfMessage, CancellationToken cancellationToken)
+    {
+        firstSend.TrySetResult();
+        EnterWireOperation();
+        try
+        {
+            if (ThrowOnSends)
+            {
+                // An exception type outside the WebSocket contract, simulating an unexpected
+                // fault that the outbound pump must contain rather than propagate.
+                throw new InvalidOperationException("Unexpected send fault.");
+            }
+
+            if (!BlockSends)
+            {
+                return;
+            }
+
+            var pending = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            lock (gate)
+            {
+                if (Aborted)
+                {
+                    throw new WebSocketException(WebSocketError.ConnectionClosedPrematurely);
+                }
+
+                pendingSends.Add(pending);
+            }
+
+            using var registration = cancellationToken.Register(() => pending.TrySetCanceled(cancellationToken));
+            await pending.Task;
+        }
+        finally
+        {
+            ExitWireOperation();
+        }
     }
 
     public override void Abort()
@@ -192,11 +272,35 @@ internal sealed class StubWebSocket : WebSocket
         }
     }
 
-    public override Task CloseAsync(WebSocketCloseStatus closeStatus, string? statusDescription, CancellationToken cancellationToken) =>
-        Task.CompletedTask;
+    public override async Task CloseAsync(WebSocketCloseStatus closeStatus, string? statusDescription, CancellationToken cancellationToken)
+    {
+        EnterWireOperation();
+        try
+        {
+            state = WebSocketState.Closed;
+        }
+        finally
+        {
+            ExitWireOperation();
+        }
 
-    public override Task CloseOutputAsync(WebSocketCloseStatus closeStatus, string? statusDescription, CancellationToken cancellationToken) =>
-        Task.CompletedTask;
+        await Task.CompletedTask;
+    }
+
+    public override async Task CloseOutputAsync(WebSocketCloseStatus closeStatus, string? statusDescription, CancellationToken cancellationToken)
+    {
+        EnterWireOperation();
+        try
+        {
+            state = WebSocketState.CloseSent;
+        }
+        finally
+        {
+            ExitWireOperation();
+        }
+
+        await Task.CompletedTask;
+    }
 
     public override Task<WebSocketReceiveResult> ReceiveAsync(ArraySegment<byte> buffer, CancellationToken cancellationToken) =>
         new TaskCompletionSource<WebSocketReceiveResult>().Task;
@@ -204,4 +308,14 @@ internal sealed class StubWebSocket : WebSocket
     public override void Dispose()
     {
     }
+
+    private void EnterWireOperation()
+    {
+        if (Interlocked.Increment(ref activeWireOperations) > 1)
+        {
+            ObservedOverlap = true;
+        }
+    }
+
+    private void ExitWireOperation() => Interlocked.Decrement(ref activeWireOperations);
 }

@@ -283,7 +283,9 @@ public static class ConversationWebSocketEndpoint
             || allowedOrigins.Contains(origin, StringComparer.OrdinalIgnoreCase);
     }
 
-    private static async Task CloseSocketAsync(WebSocket socket)
+    // Internal (not private) so the WebApi.Tests project can drive the exact cleanup call the
+    // endpoint's finally block makes, rather than a re-implementation that could drift from it.
+    internal static async Task CloseSocketAsync(WebSocket socket)
     {
         if (socket.State is WebSocketState.Open or WebSocketState.CloseReceived)
         {
