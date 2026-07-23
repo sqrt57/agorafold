@@ -26,6 +26,10 @@ let ackTimer: ReturnType<typeof setTimeout> | null = null
 let reconnectAttempt = 0
 let disposed = false
 let connectionVersion = 0
+// The ack timeout and the socket-close handler can both decide to fall back to HTTP for
+// the same send. Only the first attempt may run — a duplicate would complete later and
+// mutate send state that no longer belongs to it.
+let httpSendStartedFor: string | null = null
 // Live messages that arrive over the socket before the thread snapshot has loaded.
 let bufferedLive: ConversationMessage[] = []
 
@@ -193,19 +197,26 @@ function connect(id: string, version: number) {
 }
 
 async function sendViaHttp(id: string, clientMessageId: string, body: string, version: number) {
+  if (httpSendStartedFor === clientMessageId) return
+  httpSendStartedFor = clientMessageId
+
   pendingSend.value = { clientMessageId, body }
   try {
     const loadedThread = await conversationsApi.reply(id, body, clientMessageId)
     if (version !== connectionVersion || disposed) return
     mergeIntoThread(loadedThread.messages)
-    replyBody.value = ''
-    error.value = ''
+    // A socket ack may have completed this send (and a newer send may have started)
+    // while the request was in flight — only touch send state that is still ours.
+    if (pendingSend.value?.clientMessageId === clientMessageId) {
+      replyBody.value = ''
+      error.value = ''
+    }
   } catch (err) {
-    if (version === connectionVersion && !disposed) {
+    if (version === connectionVersion && !disposed && pendingSend.value?.clientMessageId === clientMessageId) {
       error.value = displayError(err)
     }
   } finally {
-    if (version === connectionVersion && !disposed) {
+    if (version === connectionVersion && !disposed && pendingSend.value?.clientMessageId === clientMessageId) {
       pendingSend.value = null
     }
   }
