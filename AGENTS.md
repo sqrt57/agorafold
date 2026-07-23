@@ -64,7 +64,7 @@ dotnet ef migrations add <Name> --project src/AgoraFold.Core --startup-project s
 dotnet ef database update --project src/AgoraFold.Core --startup-project src/AgoraFold.Mvc
 ```
 
-There is no test project yet. After code changes, run `dotnet build` and run the relevant frontend build or development command when applicable.
+Tests: `dotnet test` runs `tests/AgoraFold.WebApi.Tests` (xunit); the Vue client has `npm test` (vitest) in `src/AgoraFold.Vue`. After code changes, run `dotnet build` plus the relevant tests, and the relevant frontend build or development command when applicable.
 
 ## Architecture
 

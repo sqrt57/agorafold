@@ -9,6 +9,9 @@
     <Project Path="src/AgoraFold.BlazorWasm/AgoraFold.BlazorWasm.csproj" />
     <Project Path="src/AgoraFold.BlazorWasm.Client/AgoraFold.BlazorWasm.Client.csproj" />
   </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/AgoraFold.WebApi.Tests/AgoraFold.WebApi.Tests.csproj" />
+  </Folder>
   <Folder Name="/tools/">
     <Project Path="tools/AgoraFold.Admin/AgoraFold.Admin.csproj" />
     <Project Path="tools/AgoraFold.Admin.Tui/AgoraFold.Admin.Tui.csproj" />

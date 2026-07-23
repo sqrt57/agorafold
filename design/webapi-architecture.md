@@ -82,6 +82,8 @@ Session revocation: cookie authentication only revalidates the Identity security
 
 The Web API's in-memory `ConversationWebSocketManager` tracks connections by conversation. Each incoming message gets a fresh DI scope, is authorized and persisted through `IConversationService`, and is broadcast only after `SaveChangesAsync` succeeds. The long-lived socket therefore never holds a scoped `AppDbContext`.
 
+Delivery is isolated per connection: a broadcast only enqueues onto each connection's bounded outbound queue (drained by a per-connection pump task), so a stalled listener never delays the REST reply endpoint, the sending participant's receive loop, or other participants. Every socket write — including close frames — is bounded by a send timeout; a timed-out write, or a queue overflow, marks the peer unhealthy and aborts the socket rather than silently dropping events (a drop would break the `connected` no-missed-messages guarantee — an aborted client instead reconnects and reloads the snapshot). Covered by `tests/AgoraFold.WebApi.Tests`.
+
 The Vue conversation thread uses the socket for replies and live delivery. It keeps the reply draft in the textarea until the server acknowledges persistence; an ambiguous outcome (disconnect or ack timeout while a send is pending) is resolved by retrying over HTTP with the same `clientMessageId`, and when the socket is down entirely it falls back to plain HTTP sends. Initial load and reconnect recovery use `GET /api/conversations/{id}` merged by message id, re-fetched on every `connected` event.
 
 ## Gotchas

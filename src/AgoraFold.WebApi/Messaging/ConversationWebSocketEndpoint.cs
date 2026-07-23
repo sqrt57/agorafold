@@ -23,6 +23,7 @@ public static class ConversationWebSocketEndpoint
     // idle listeners. Keeps deactivated/deleted accounts and rotated stamps (password change,
     // admin deactivation) from holding a live subscription.
     private static readonly TimeSpan SessionRevalidationInterval = TimeSpan.FromMinutes(1);
+    private static readonly TimeSpan CloseTimeout = TimeSpan.FromSeconds(10);
 
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
@@ -279,7 +280,14 @@ public static class ConversationWebSocketEndpoint
         {
             try
             {
-                await socket.CloseAsync(WebSocketCloseStatus.NormalClosure, "Connection closed.", CancellationToken.None);
+                // Bounded: the graceful close handshake writes to the socket and waits for
+                // the peer's close frame — a stalled peer must not pin the request here.
+                using var closeCts = new CancellationTokenSource(CloseTimeout);
+                await socket.CloseAsync(WebSocketCloseStatus.NormalClosure, "Connection closed.", closeCts.Token);
+            }
+            catch (OperationCanceledException)
+            {
+                socket.Abort();
             }
             catch (WebSocketException)
             {
