@@ -2,6 +2,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\AgoraFold.Core\AgoraFold.Core.csproj" />
+    <ProjectReference Include="..\AgoraFold.LiveChat\AgoraFold.LiveChat.csproj" />
   </ItemGroup>
 
   <ItemGroup>

@@ -19,7 +19,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\src\AgoraFold.WebApi\AgoraFold.WebApi.csproj" />
+    <ProjectReference Include="..\..\src\AgoraFold.LiveChat\AgoraFold.LiveChat.csproj" />
   </ItemGroup>
 
 </Project>

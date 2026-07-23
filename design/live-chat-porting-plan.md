@@ -4,6 +4,8 @@
 
 Planned on 2026-07-23. The Web API + Vue implementation is complete and is the behavioral reference. Nine variants remain: MVC, Razor Pages, HTMX, Blazor Server, Blazor WebAssembly, React, Svelte, Angular, and SolidJS. Implementation notes from codebase exploration (exact file paths, framework adaptations, machine gotchas) were merged into this document on 2026-07-23, before implementation started.
 
+**Phase 1 (shared backend extraction) is complete as of 2026-07-23** — see the Phase 1 status note in `design/backlog.md` for details. Phase 2 (React, Svelte, Angular, SolidJS client ports) is next.
+
 ## Resuming with zero session context
 
 1. Read this document, then `webapi-architecture.md` § "WebSocket messaging" (the protocol contract), then `backlog.md` — check the live-chat task's Status line for which phases are already done, and re-check the backlog for externally-added findings.

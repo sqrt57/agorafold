@@ -3,9 +3,9 @@ using System.Net.WebSockets;
 using System.Text.Json;
 using System.Threading.Channels;
 using AgoraFold.Core.Entities;
-using AgoraFold.WebApi.Models.Conversations;
+using AgoraFold.LiveChat.Protocol;
 
-namespace AgoraFold.WebApi.Messaging;
+namespace AgoraFold.LiveChat.Transport;
 
 public sealed class ConversationWebSocketManager
 {

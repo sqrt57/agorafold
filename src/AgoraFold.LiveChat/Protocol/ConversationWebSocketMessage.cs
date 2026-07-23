@@ -1,6 +1,6 @@
 using AgoraFold.Core.Entities;
 
-namespace AgoraFold.WebApi.Models.Conversations;
+namespace AgoraFold.LiveChat.Protocol;
 
 public sealed record ConversationWebSocketRequest(string? Type, string? Body, Guid? ClientMessageId);
 

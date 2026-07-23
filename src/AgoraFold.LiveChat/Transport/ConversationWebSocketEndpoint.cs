@@ -5,12 +5,13 @@ using System.Text.Json;
 using AgoraFold.Core.Entities;
 using AgoraFold.Core.Exceptions;
 using AgoraFold.Core.Services;
-using AgoraFold.WebApi.Models.Conversations;
-using AgoraFold.WebApi.Options;
+using AgoraFold.LiveChat.Origin;
+using AgoraFold.LiveChat.Protocol;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Identity;
-using Microsoft.Extensions.Options;
+using Microsoft.Extensions.DependencyInjection;
 
-namespace AgoraFold.WebApi.Messaging;
+namespace AgoraFold.LiveChat.Transport;
 
 public static class ConversationWebSocketEndpoint
 {
@@ -32,9 +33,9 @@ public static class ConversationWebSocketEndpoint
         int conversationId,
         IServiceScopeFactory scopeFactory,
         ConversationWebSocketManager manager,
-        IOptionsMonitor<JsClientCorsOptions> corsOptions)
+        ILiveChatOriginPolicy originPolicy)
     {
-        if (!IsAllowedOrigin(context, corsOptions.CurrentValue.JsClientOrigins))
+        if (!originPolicy.IsAllowed(context))
         {
             context.Response.StatusCode = StatusCodes.Status403Forbidden;
             return;
@@ -273,17 +274,7 @@ public static class ConversationWebSocketEndpoint
         }
     }
 
-    private static bool IsAllowedOrigin(HttpContext context, IEnumerable<string> allowedOrigins)
-    {
-        // An absent Origin is allowed deliberately: browsers always send Origin on WebSocket
-        // handshakes, so cross-site hijacking is still blocked by the allowlist — only
-        // non-browser tooling omits the header, and it still needs the auth cookie.
-        var origin = context.Request.Headers.Origin.ToString();
-        return string.IsNullOrEmpty(origin)
-            || allowedOrigins.Contains(origin, StringComparer.OrdinalIgnoreCase);
-    }
-
-    // Internal (not private) so the WebApi.Tests project can drive the exact cleanup call the
+    // Internal (not private) so the LiveChat.Tests project can drive the exact cleanup call the
     // endpoint's finally block makes, rather than a re-implementation that could drift from it.
     internal static async Task CloseSocketAsync(WebSocket socket)
     {

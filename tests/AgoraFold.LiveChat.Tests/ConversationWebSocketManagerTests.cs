@@ -1,8 +1,8 @@
 using System.Net.WebSockets;
-using AgoraFold.WebApi.Messaging;
-using AgoraFold.WebApi.Models.Conversations;
+using AgoraFold.LiveChat.Protocol;
+using AgoraFold.LiveChat.Transport;
 
-namespace AgoraFold.WebApi.Tests;
+namespace AgoraFold.LiveChat.Tests;
 
 public sealed class ConversationWebSocketManagerTests
 {

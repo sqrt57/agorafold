@@ -1,11 +1,13 @@
 using AgoraFold.Core;
 using AgoraFold.Core.Entities;
 using AgoraFold.Core.Storage;
+using AgoraFold.LiveChat;
+using AgoraFold.LiveChat.Origin;
 using AgoraFold.WebApi.Filters;
-using AgoraFold.WebApi.Messaging;
 using AgoraFold.WebApi.Options;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -34,7 +36,9 @@ builder.Services.ConfigureApplicationCookie(options =>
 });
 
 builder.Services.AddAgoraFoldCore();
-builder.Services.AddSingleton<ConversationWebSocketManager>();
+builder.Services.AddLiveChat();
+builder.Services.AddSingleton<ILiveChatOriginPolicy>(sp =>
+    new ConfiguredOriginPolicy(() => sp.GetRequiredService<IOptionsMonitor<JsClientCorsOptions>>().CurrentValue.JsClientOrigins));
 builder.Services.Configure<ListingImageStorageOptions>(o =>
     o.RootPath = Path.Combine(builder.Environment.WebRootPath, "uploads", "listings"));
 
@@ -78,8 +82,7 @@ app.UseCors("JsClients");
 app.UseAuthentication();
 app.UseAuthorization();
 
-app.MapGet("/ws/conversations/{conversationId:int}", ConversationWebSocketEndpoint.HandleAsync)
-    .RequireAuthorization();
+app.MapConversationLiveChatEndpoint().RequireAuthorization();
 app.MapControllers();
 
 app.Run();

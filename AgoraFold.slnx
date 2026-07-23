@@ -1,6 +1,7 @@
 <Solution>
   <Folder Name="/src/">
     <Project Path="src/AgoraFold.Core/AgoraFold.Core.csproj" />
+    <Project Path="src/AgoraFold.LiveChat/AgoraFold.LiveChat.csproj" />
     <Project Path="src/AgoraFold.Mvc/AgoraFold.Mvc.csproj" />
     <Project Path="src/AgoraFold.RazorPages/AgoraFold.RazorPages.csproj" />
     <Project Path="src/AgoraFold.WebApi/AgoraFold.WebApi.csproj" />
@@ -10,7 +11,7 @@
     <Project Path="src/AgoraFold.BlazorWasm.Client/AgoraFold.BlazorWasm.Client.csproj" />
   </Folder>
   <Folder Name="/tests/">
-    <Project Path="tests/AgoraFold.WebApi.Tests/AgoraFold.WebApi.Tests.csproj" />
+    <Project Path="tests/AgoraFold.LiveChat.Tests/AgoraFold.LiveChat.Tests.csproj" />
   </Folder>
   <Folder Name="/tools/">
     <Project Path="tools/AgoraFold.Admin/AgoraFold.Admin.csproj" />
