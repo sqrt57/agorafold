@@ -2,6 +2,21 @@
 
 Known issues and follow-ups that aren't part of any current task. Newest entries at the top.
 
+## Fix remaining Web API + Vue live-chat concurrency issues
+
+**Scope:** Resolve the latest review findings in the Web API + Vue reference implementation before porting live chat to the other showroom variants.
+
+**Findings:**
+
+1. **High — a new connection can become permanently orphaned.** `ConversationWebSocketManager.Remove` can observe a conversation's connection dictionary as empty, then race with `Add`: the new connection is inserted into that same dictionary before the top-level `TryRemove`, which removes the dictionary containing it. The client receives `connected` but future broadcasts cannot find it, violating the no-missed-messages guarantee until reconnection. Keep empty conversation buckets or synchronize `Add`/`Remove` per conversation.
+2. **Medium — client ordering loses timestamp precision.** `ConversationThreadView.vue` sorts with `Date.parse`, which retains only milliseconds, while backend timestamps can differ within a millisecond. Such messages compare equal in JavaScript and fall back to ID order, potentially disagreeing with `ConversationService`'s full-precision `SentAt`, then `Id` ordering. Preserve enough timestamp precision to apply the server's canonical order.
+3. **Medium — final socket closure can overlap an outbound send.** Endpoint cleanup calls `WebSocket.CloseAsync` directly before waiting for the connection's outbound pump. This can overlap a pump `SendAsync`, despite `ConversationWebSocketConnection.CloseAsync` existing to serialize close frames with sends. Route all socket writes, including final and oversized-payload closure, through the connection's send lock and keep cleanup bounded.
+4. **Low — live delivery never recovers after eight failed reconnects.** Once `MAX_RECONNECT_ATTEMPTS` is reached, the Vue thread schedules no further attempt and does not react when the browser comes back online. HTTP replies still work, but incoming live messages remain unavailable until navigation or refresh. Add a delayed retry, an `online` listener, or an explicit reconnect action.
+
+**Acceptance criteria:** Add regression coverage for concurrent last-remove/new-add registration, sub-millisecond message ordering, close/send serialization, and recovery after the reconnect limit. The Web API tests, Vue test suite, full .NET build, and Vue production build must pass.
+
+**Status (2026-07-23):** Complete. (1) `ConversationWebSocketManager` serializes bucket membership under a lock, so a concurrent last-`Remove`/new-`Add` can no longer orphan a registered connection. (2) The Vue thread compares `sentAt` at full 100ns-tick precision (`compareSentAt`) instead of `Date.parse`. (3) Endpoint cleanup drains the outbound pump (`DisposeAsync`) before closing the socket, the oversized-payload close goes through the connection's send lock, and the pump contains unexpected send faults instead of faulting the cleanup path. (4) The Vue thread leaves the offline state via a Retry control, the browser's `online` event, or a successful HTTP reply, and a `PolicyViolation` close (revoked session) stops the reconnect loop instead of retrying into 401s. Regression coverage: `tests/AgoraFold.WebApi.Tests` (orphan race, pump-fault containment) and the Vue vitest suite (sub-millisecond ordering, session revocation, offline recovery via Retry and via HTTP reply) — each verified to fail against the pre-fix code. .NET build, Web API tests, Vue suite, and Vue production build all pass. Documented in `design/webapi-architecture.md` § "WebSocket messaging".
+
 ## Add live chat over WebSockets to every showroom variant
 
 **Scope:** Upgrade buyer-seller messaging from request/response refreshes to live chat in all ten showroom variants: MVC, Razor Pages, Vue, HTMX, Blazor Server, Blazor WebAssembly, React, Svelte, Angular, and SolidJS.
