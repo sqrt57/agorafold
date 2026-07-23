@@ -4,7 +4,7 @@
 
 Planned on 2026-07-23. The Web API + Vue implementation is complete and is the behavioral reference. Nine variants remain: MVC, Razor Pages, HTMX, Blazor Server, Blazor WebAssembly, React, Svelte, Angular, and SolidJS. Implementation notes from codebase exploration (exact file paths, framework adaptations, machine gotchas) were merged into this document on 2026-07-23, before implementation started.
 
-**Phase 1 (shared backend extraction) is complete as of 2026-07-23** — see the Phase 1 status note in `design/backlog.md` for details. Phase 2 (React, Svelte, Angular, SolidJS client ports) is next.
+**Phase 1 (shared backend extraction) is complete as of 2026-07-23** — see the Phase 1 status note in `design/backlog.md` for details. **Phase 2 is in progress**: React is complete as of 2026-07-23 (see status note in `design/backlog.md`); Svelte, SolidJS, and Angular remain.
 
 ## Resuming with zero session context
 
@@ -189,7 +189,7 @@ Validate the actual browser-WASM socket and cookie handshake in a browser; a suc
 | Variant | Live delivery | Send/fallback | Required focused verification |
 |---|---|---|---|
 | Vue | Existing Web API native socket | Socket / Web API HTTP | Existing Vitest suite |
-| React | Existing Web API native socket | Socket / Web API HTTP | Component lifecycle, stale effect, fallback race |
+| React | Existing Web API native socket | Socket / Web API HTTP | Component lifecycle, stale effect, fallback race — **done** |
 | Svelte | Existing Web API native socket | Socket / Web API HTTP | Reactive route change and teardown |
 | Angular | Existing Web API native socket | Socket / Web API HTTP | Signal/effect destruction and fake-timer reconnect |
 | SolidJS | Existing Web API native socket | Socket / Web API HTTP | Accessor reactivity and `onCleanup` |
