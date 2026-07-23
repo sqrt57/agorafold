@@ -25,7 +25,7 @@ class FakeSocket {
   onopen: (() => void) | null = null
   onmessage: ((event: { data: string }) => void) | null = null
   onerror: (() => void) | null = null
-  onclose: (() => void) | null = null
+  onclose: ((event: { code: number }) => void) | null = null
   sent: string[] = []
 
   send(data: string) {
@@ -45,9 +45,9 @@ class FakeSocket {
     this.onmessage?.({ data: JSON.stringify(event) })
   }
 
-  fireClose() {
+  fireClose(code = 1006) {
     this.readyState = WebSocket.CLOSED
-    this.onclose?.()
+    this.onclose?.({ code })
   }
 }
 
@@ -116,6 +116,22 @@ function renderedBodies(view: VueWrapper): string[] {
   return view.findAll('.message div:not(.meta)').map((el) => el.text())
 }
 
+// Drives the view through every reconnect attempt (each gets a socket that immediately
+// drops) until the backoff gives up and the view parks in the offline state.
+async function goOffline(socket: FakeSocket) {
+  let current = socket
+  for (let i = 0; i < 8; i++) {
+    const next = new FakeSocket()
+    vi.mocked(conversationsApi.openSocket).mockReturnValue(next as unknown as WebSocket)
+    current.fireClose()
+    vi.advanceTimersByTime(10000) // covers the largest backoff delay
+    await flushPromises()
+    current = next
+  }
+  current.fireClose()
+  await flushPromises()
+}
+
 it('orders messages by sentAt then id, matching the snapshot order', async () => {
   // Concurrent sends can persist with sentAt order opposing id order. The snapshot
   // arrives in canonical order (sentAt asc, id tiebreak); the merge must preserve it,
@@ -132,6 +148,17 @@ it('orders messages by sentAt then id, matching the snapshot order', async () =>
   socket.emit({ type: 'message', message: makeSocketMessage(7, 'newest', '2026-07-23T12:00:01Z') })
   await flushPromises()
   expect(renderedBodies(view)).toEqual(['early', 'late', 'newest'])
+})
+
+it('preserves server order for messages that differ only below a millisecond', async () => {
+  // SentAt carries 100ns ticks, so two messages can differ only past the third
+  // fractional digit. Date.parse truncates to milliseconds, which would make these
+  // compare equal and fall back to id order — inverting the server's order.
+  const early = { ...makeMessage(6, 'early'), sentAt: '2026-07-23T12:00:00.123Z' }
+  const late = { ...makeMessage(5, 'late'), sentAt: '2026-07-23T12:00:00.1230001Z' }
+  const { view } = await mountConnected([early, late])
+
+  expect(renderedBodies(view)).toEqual(['early', 'late'])
 })
 
 it('starts only one HTTP fallback when the ack timeout and socket close both fire', async () => {
@@ -203,4 +230,56 @@ it('keeps a newer send pending when a stale HTTP fallback completes', async () =
   expect(textarea.element.value).toBe('second message')
   expect(textarea.attributes('disabled')).toBeDefined()
   expect(view.find('button').text()).toBe('Sending…')
+})
+
+it('stops reconnecting when the server revokes the session', async () => {
+  const { view, socket } = await mountConnected()
+
+  // The server's revalidation sends an error event, then closes with PolicyViolation.
+  socket.emit({ type: 'error', error: 'Your session is no longer valid.' })
+  socket.fireClose(1008)
+  await flushPromises()
+
+  expect(view.find('.error').text()).toContain('no longer valid')
+  expect(view.text()).toContain('Live chat is unavailable')
+
+  // No reconnect may be scheduled — the handshake would just repeat the 401.
+  vi.mocked(conversationsApi.openSocket).mockClear()
+  vi.advanceTimersByTime(60000)
+  await flushPromises()
+  expect(conversationsApi.openSocket).not.toHaveBeenCalled()
+})
+
+it('reconnects with a fresh backoff budget when Retry is clicked while offline', async () => {
+  const { view, socket } = await mountConnected()
+  await goOffline(socket)
+  expect(view.text()).toContain('Live chat is unavailable')
+
+  const retrySocket = new FakeSocket()
+  vi.mocked(conversationsApi.openSocket).mockClear().mockReturnValue(retrySocket as unknown as WebSocket)
+
+  await view.find('button.retry').trigger('click')
+  expect(conversationsApi.openSocket).toHaveBeenCalledTimes(1)
+
+  retrySocket.open()
+  retrySocket.emit({ type: 'connected' })
+  await flushPromises()
+  expect(view.text()).toContain('Live chat connected')
+})
+
+it('reconnects after a successful HTTP reply while offline', async () => {
+  const { view, socket } = await mountConnected()
+  await goOffline(socket)
+
+  const retrySocket = new FakeSocket()
+  vi.mocked(conversationsApi.openSocket).mockClear().mockReturnValue(retrySocket as unknown as WebSocket)
+  vi.mocked(conversationsApi.reply).mockResolvedValue(makeThread([makeMessage(10, 'hello again')]))
+
+  // With no open socket the send goes straight to HTTP; a successful round-trip proves
+  // the server is reachable, so the live connection restarts.
+  await sendReply(view, 'hello again')
+  await flushPromises()
+
+  expect(conversationsApi.reply).toHaveBeenCalledTimes(1)
+  expect(conversationsApi.openSocket).toHaveBeenCalledTimes(1)
 })

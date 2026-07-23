@@ -19,6 +19,9 @@ const pendingSend = ref<{ clientMessageId: string; body: string } | null>(null)
 
 const MAX_RECONNECT_ATTEMPTS = 8
 const ACK_TIMEOUT_MS = 10000
+// WebSocketCloseStatus.PolicyViolation — the server closes with this code only when the
+// session stopped being valid (rotated security stamp, deactivated account).
+const SESSION_REVOKED_CLOSE_CODE = 1008
 
 let socket: WebSocket | null = null
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null
@@ -30,8 +33,6 @@ let connectionVersion = 0
 // the same send. Only the first attempt may run — a duplicate would complete later and
 // mutate send state that no longer belongs to it.
 let httpSendStartedFor: string | null = null
-// Live messages that arrive over the socket before the thread snapshot has loaded.
-let bufferedLive: ConversationMessage[] = []
 
 function displayError(err: unknown): string {
   return err instanceof ApiError ? (err.errors[0] ?? err.message) : (err as Error).message
@@ -47,22 +48,35 @@ function toMessage(m: conversationsApi.ConversationWebSocketMessage): Conversati
   }
 }
 
+// sentAt carries the server's full 100ns-tick precision with trailing fractional zeros
+// trimmed (".12Z" vs ".1234567Z"), so it can be neither string-compared (lexicographic
+// order breaks across different fraction lengths) nor Date.parse'd (truncates to
+// milliseconds, collapsing sub-millisecond neighbors into id-order ties that can
+// contradict the server's ordering). Compare the fixed-width prefix up to whole
+// seconds, then the zero-padded fractions.
+function compareSentAt(a: string, b: string): number {
+  const [aSeconds = '', aFraction = ''] = a.replace(/Z$/, '').split('.')
+  const [bSeconds = '', bFraction = ''] = b.replace(/Z$/, '').split('.')
+  if (aSeconds !== bSeconds) return aSeconds < bSeconds ? -1 : 1
+
+  const aTicks = aFraction.padEnd(7, '0')
+  const bTicks = bFraction.padEnd(7, '0')
+  return aTicks < bTicks ? -1 : aTicks > bTicks ? 1 : 0
+}
+
 // All message arrival paths (snapshot, live broadcast, ack, HTTP reply response) funnel
 // through this union-by-id merge, so duplicates collapse and rendering follows the
 // canonical thread order — sentAt ascending with id as tiebreak, the same rule
-// ConversationService applies to snapshots — not arrival order. sentAt must be parsed,
-// not compared as a string: the serializer trims trailing zeros in fractional seconds,
-// which breaks lexicographic ordering.
+// ConversationService applies to snapshots — not arrival order.
 function mergeIntoThread(incoming: ConversationMessage[]) {
-  if (!thread.value) {
-    bufferedLive.push(...incoming)
-    return
-  }
+  // Unreachable in practice — the socket only connects after start() has stored the
+  // snapshot — but kept for type narrowing.
+  if (!thread.value) return
 
   const byId = new Map(thread.value.messages.map((m) => [m.id, m]))
   for (const m of incoming) byId.set(m.id, m)
   thread.value.messages = [...byId.values()].sort(
-    (a, b) => Date.parse(a.sentAt) - Date.parse(b.sentAt) || a.id - b.id,
+    (a, b) => compareSentAt(a.sentAt, b.sentAt) || a.id - b.id,
   )
 }
 
@@ -75,8 +89,6 @@ async function load(id: string, version: number) {
       mergeIntoThread(loadedThread.messages)
     } else {
       thread.value = loadedThread
-      mergeIntoThread(bufferedLive)
-      bufferedLive = []
     }
   } catch (err) {
     if (version === connectionVersion && !disposed) {
@@ -189,8 +201,18 @@ function connect(id: string, version: number) {
     error.value = 'The live chat connection failed. Reconnecting…'
   }
 
-  socket.onclose = () => {
+  socket.onclose = (event) => {
     if (disposed || version !== connectionVersion) return
+
+    if (event.code === SESSION_REVOKED_CLOSE_CODE) {
+      // Reconnecting or falling back to HTTP would only repeat the 401. Stop here;
+      // the draft stays in the textarea for after re-login.
+      clearAckTimer()
+      pendingSend.value = null
+      connectionState.value = 'offline'
+      error.value = 'Your session is no longer valid. Sign in again to continue.'
+      return
+    }
 
     if (pendingSend.value) {
       // Ambiguous outcome: the message may or may not have been persisted before the
@@ -213,6 +235,12 @@ async function sendViaHttp(id: string, clientMessageId: string, body: string, ve
     const loadedThread = await conversationsApi.reply(id, body, clientMessageId)
     if (version !== connectionVersion || disposed) return
     mergeIntoThread(loadedThread.messages)
+    // A successful round-trip proves the server is reachable again — restart the live
+    // connection if the reconnect backoff had given up.
+    if (connectionState.value === 'offline') {
+      reconnectAttempt = 0
+      connect(id, version)
+    }
     // A socket ack may have completed this send (and a newer send may have started)
     // while the request was in flight — only touch send state that is still ours.
     if (pendingSend.value?.clientMessageId === clientMessageId) {
@@ -258,6 +286,16 @@ function sendReply() {
   }
 }
 
+// Leaves the offline state (exhausted backoff or a revoked session the user may since
+// have renewed) with a fresh reconnect budget. Wired to the Retry control and to the
+// browser's 'online' event — network restoration shouldn't wait on the user noticing.
+function retryConnection() {
+  if (disposed || connectionState.value !== 'offline') return
+  reconnectAttempt = 0
+  error.value = ''
+  connect(route.params.id as string, connectionVersion)
+}
+
 async function start(id: string) {
   connectionVersion += 1
   const version = connectionVersion
@@ -266,7 +304,6 @@ async function start(id: string) {
   thread.value = null
   replyBody.value = ''
   pendingSend.value = null
-  bufferedLive = []
   clearAckTimer()
   closeSocket()
 
@@ -287,8 +324,11 @@ watch(
   { immediate: true },
 )
 
+window.addEventListener('online', retryConnection)
+
 onUnmounted(() => {
   disposed = true
+  window.removeEventListener('online', retryConnection)
   if (reconnectTimer) clearTimeout(reconnectTimer)
   clearAckTimer()
   closeSocket()
@@ -303,7 +343,10 @@ onUnmounted(() => {
     <p class="muted">
       <span v-if="connectionState === 'connected'">Live chat connected</span>
       <span v-else-if="connectionState === 'reconnecting'">Reconnecting to live chat…</span>
-      <span v-else-if="connectionState === 'offline'">Live chat is unavailable — replies still send, but new messages need a refresh.</span>
+      <span v-else-if="connectionState === 'offline'">
+        Live chat is unavailable — replies still send, but new messages won't appear until it reconnects.
+        <button type="button" class="retry" @click="retryConnection">Retry</button>
+      </span>
       <span v-else>Connecting to live chat…</span>
     </p>
 
