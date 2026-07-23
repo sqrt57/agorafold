@@ -10,6 +10,7 @@ Design documents for AgoraFold: architecture decisions, feature designs, and RFC
 - `htmx-architecture.md` — architecture notes for the HTMX variant
 - `blazor-server-architecture.md` — architecture notes for the Blazor Server variant
 - `blazor-wasm-architecture.md` — architecture notes for the Blazor WebAssembly variant
+- `live-chat-porting-plan.md` — phased plan, cross-variant acceptance criteria, and per-file implementation notes for porting the Vue WebSocket live-chat reference
 - `backlog.md` — known issues and follow-ups that aren't part of any current task
 
 ## Conventions
