@@ -50,6 +50,15 @@ cd src/AgoraFold.Angular && npm run start # http://localhost:5176
 cd src/AgoraFold.SolidJS && npm run dev   # http://localhost:5177
 ```
 
+## Repo layout
+
+- `src/` — the core library and all ten front-end variant projects
+- `tools/` — local Identity admin utilities (CLI and TUI), not one of the showroom variants
+- `design/` — architecture notes, project spec, and backlog ([contents](design/README.md))
+- `docker-compose.yml` — local Postgres for development
+- `AgoraFold.slnx` — solution file
+- `AGENTS.md` — repo instructions for coding agents (Claude Code, Codex, etc.)
+
 ## License
 
 MIT — see [LICENSE](LICENSE).
