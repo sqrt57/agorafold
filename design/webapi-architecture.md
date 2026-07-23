@@ -72,7 +72,7 @@ The wire protocol:
 
 - Client to server: `{ "type": "message", "body": "...", "clientMessageId": "<guid>" }`. `clientMessageId` is an optional idempotency key — retrying a send with the same key returns the already-persisted message instead of inserting a duplicate.
 - Server to the new connection, sent only after it is registered for broadcasts: `{ "type": "connected" }`. Once a client observes this event, every later commit is guaranteed to reach it as a broadcast, so a thread snapshot fetched from that point on (merged by message id) cannot miss messages — this closes the load/subscribe race on both initial connect and reconnect.
-- Server to all participants: `{ "type": "message", "message": { "id": ..., "senderId": "...", "senderDisplayName": "...", "body": "...", "sentAt": "..." } }`. `id` is the persisted message id; clients merge, dedupe, and order by it rather than trusting arrival order (concurrent broadcasts don't guarantee database order).
+- Server to all participants: `{ "type": "message", "message": { "id": ..., "senderId": "...", "senderDisplayName": "...", "body": "...", "sentAt": "..." } }`. `id` is the persisted message id; clients merge and dedupe by it rather than trusting arrival order (concurrent broadcasts don't guarantee database order), then sort the thread by `sentAt` with `id` as tiebreak — the same canonical order `ConversationService` gives snapshots, so a reload or reconnect cannot move messages.
 - Server to the sending connection only: `{ "type": "ack", "clientMessageId": "...", "message": { ... } }`, confirming persistence of that send.
 - Validation or protocol failures: `{ "type": "error", "error": "...", "clientMessageId": ... }` (`clientMessageId` echoed when the failure relates to a specific send).
 

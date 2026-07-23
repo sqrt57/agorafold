@@ -49,7 +49,10 @@ function toMessage(m: conversationsApi.ConversationWebSocketMessage): Conversati
 
 // All message arrival paths (snapshot, live broadcast, ack, HTTP reply response) funnel
 // through this union-by-id merge, so duplicates collapse and rendering follows the
-// server-assigned message id order — not arrival order.
+// canonical thread order — sentAt ascending with id as tiebreak, the same rule
+// ConversationService applies to snapshots — not arrival order. sentAt must be parsed,
+// not compared as a string: the serializer trims trailing zeros in fractional seconds,
+// which breaks lexicographic ordering.
 function mergeIntoThread(incoming: ConversationMessage[]) {
   if (!thread.value) {
     bufferedLive.push(...incoming)
@@ -58,7 +61,9 @@ function mergeIntoThread(incoming: ConversationMessage[]) {
 
   const byId = new Map(thread.value.messages.map((m) => [m.id, m]))
   for (const m of incoming) byId.set(m.id, m)
-  thread.value.messages = [...byId.values()].sort((a, b) => a.id - b.id)
+  thread.value.messages = [...byId.values()].sort(
+    (a, b) => Date.parse(a.sentAt) - Date.parse(b.sentAt) || a.id - b.id,
+  )
 }
 
 async function load(id: string, version: number) {

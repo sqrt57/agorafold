@@ -54,17 +54,22 @@ function makeThread(messages: ConversationMessage[] = []): ConversationThread {
   return { id: 3, listingId: 1, listingTitle: 'Vintage Bicycle', messages }
 }
 
-function makeSocketMessage(id: number, body: string): conversationsApi.ConversationWebSocketMessage {
-  return { id, senderId: 'buyer-1', senderDisplayName: 'Buyer', body, sentAt: '2026-07-23T12:00:00Z' }
+function makeSocketMessage(
+  id: number,
+  body: string,
+  sentAt = '2026-07-23T12:00:00Z',
+): conversationsApi.ConversationWebSocketMessage {
+  return { id, senderId: 'buyer-1', senderDisplayName: 'Buyer', body, sentAt }
 }
 
 let wrapper: VueWrapper | null = null
 
-// Mounts the view with a loaded thread and a connected fake socket.
-async function mountConnected() {
+// Mounts the view with a loaded thread and a connected fake socket. `snapshot` is
+// returned in the given order, as ConversationService would (sentAt asc, id tiebreak).
+async function mountConnected(snapshot: ConversationMessage[] = []) {
   const socket = new FakeSocket()
   vi.mocked(conversationsApi.openSocket).mockReturnValue(socket as unknown as WebSocket)
-  vi.mocked(conversationsApi.getThread).mockImplementation(async () => makeThread())
+  vi.mocked(conversationsApi.getThread).mockImplementation(async () => makeThread(snapshot))
 
   const pinia = createPinia()
   setActivePinia(pinia)
@@ -99,6 +104,28 @@ afterEach(() => {
   wrapper = null
   vi.useRealTimers()
   vi.resetAllMocks()
+})
+
+function renderedBodies(view: VueWrapper): string[] {
+  return view.findAll('.message div:not(.meta)').map((el) => el.text())
+}
+
+it('orders messages by sentAt then id, matching the snapshot order', async () => {
+  // Concurrent sends can persist with sentAt order opposing id order. The snapshot
+  // arrives in canonical order (sentAt asc, id tiebreak); the merge must preserve it,
+  // not re-sort by id. The timestamps also differ only in fractional seconds of
+  // different lengths, where lexicographic comparison inverts chronological order —
+  // so an id-only sort and a string-compare sort both fail this test.
+  const early = { ...makeMessage(6, 'early'), sentAt: '2026-07-23T12:00:00.12Z' }
+  const late = { ...makeMessage(5, 'late'), sentAt: '2026-07-23T12:00:00.1234567Z' }
+  const { view, socket } = await mountConnected([early, late])
+
+  expect(renderedBodies(view)).toEqual(['early', 'late'])
+
+  // A live broadcast merges in without disturbing the canonical order.
+  socket.emit({ type: 'message', message: makeSocketMessage(7, 'newest', '2026-07-23T12:00:01Z') })
+  await flushPromises()
+  expect(renderedBodies(view)).toEqual(['early', 'late', 'newest'])
 })
 
 it('starts only one HTTP fallback when the ack timeout and socket close both fire', async () => {
