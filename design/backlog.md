@@ -2,12 +2,6 @@
 
 Known issues and follow-ups that aren't part of any current task. Newest entries at the top.
 
-## Upgrade vulnerable Microsoft.OpenApi dependency
-
-**Where:** `src/AgoraFold.WebApi/AgoraFold.WebApi.csproj`
-
-The Web API's `Microsoft.AspNetCore.OpenApi` 10.0.0 dependency currently resolves `Microsoft.OpenApi` 2.0.0, which produces NuGet warning `NU1903` for high-severity advisory `GHSA-v5pm-xwqc-g5wc`. Upgrade to a patched, compatible dependency combination and verify that restore/build no longer reports the advisory.
-
 ## Add live chat over WebSockets to every showroom variant
 
 **Scope:** Upgrade buyer-seller messaging from request/response refreshes to live chat in all ten showroom variants: MVC, Razor Pages, Vue, HTMX, Blazor Server, Blazor WebAssembly, React, Svelte, Angular, and SolidJS.
