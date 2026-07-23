@@ -19,13 +19,3 @@ Fix these before treating Vue as the reference implementation:
 3. **Medium — sending has no acknowledgment or idempotency.** Vue clears the reply immediately after `WebSocket.send()`, while the protocol has no client request ID, persisted message ID, or correlated acknowledgment. Preserve the draft until persistence is acknowledged and make retries idempotent so an ambiguous disconnect cannot silently lose or duplicate a message.
 4. **Medium — concurrent broadcasts can render out of persisted order.** The per-connection send lock prevents overlapping socket writes but does not guarantee that concurrent broadcasts acquire it in database order. Include a stable message ID or conversation sequence in every event and have clients merge, deduplicate, and order messages by that value rather than blindly appending arrival order.
 5. **Low — Vue has no HTTP sending fallback.** The HTTP reply endpoint remains available, but Vue refuses to send while the socket is unavailable. Fall back to the existing HTTP reply API when live transport is not connected, while ensuring the HTTP response and any later socket broadcast are deduplicated through the same message identity.
-
-## React conversation thread: new reply renders out of chronological order
-
-**Where:** `src/AgoraFold.React/src/pages/ConversationThreadPage.tsx`
-
-**Observed:** On an existing thread with messages spanning multiple days, submitting a reply via `sendReply` (which calls `conversationsApi.reply()` and replaces `thread` with the server's response) rendered the just-sent message at the *top* of the list instead of appended at the bottom, even though the server's `ConversationThreadResponse.messages` is ordered by `SentAt` ascending (same `GetThreadAsync` query used by every other frontend).
-
-**Repro:** Log in, open an existing conversation with several prior messages (e.g. conversation 3, "Vintage Bicycle"), send a new reply, and check where it lands in the list relative to the older messages.
-
-**Not yet root-caused** — could be a client-side ordering bug in this page, or something in how the response was captured during ad-hoc testing. Worth a focused look before assuming either way; compare against `AgoraFold.Vue`'s `ConversationThreadView.vue`, which renders `thread.messages` in server order without issue.

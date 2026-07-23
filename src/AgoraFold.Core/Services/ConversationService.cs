@@ -53,6 +53,13 @@ public sealed class ConversationService(AppDbContext db) : IConversationService
 
         EnsureParticipant(conversation, requestingUserId);
 
+        // The Include's OrderBy only guarantees SQL order for rows freshly materialized by
+        // this query. When the same DbContext already tracks a just-added Message (e.g. this
+        // call follows PostReplyAsync in the same request), EF's identity map keeps that
+        // instance at its existing position in the collection instead of the queried order,
+        // so re-sort explicitly to guarantee callers see ascending SentAt order regardless.
+        conversation.Messages = conversation.Messages.OrderBy(m => m.SentAt).ToList();
+
         return conversation;
     }
 
